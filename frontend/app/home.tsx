@@ -40,7 +40,8 @@ export default function HomeScreen() {
     isPlaying, 
     play, 
     pause, 
-    resume 
+    resume,
+    setMusicList: setContextMusicList
   } = useAudio();
 
   useEffect(() => {
@@ -183,6 +184,7 @@ export default function HomeScreen() {
       const response = await api.fetchMusic();
       console.log('✅ Music fetched:', response);
       setMusicList(response.data || []);
+      setContextMusicList(response.data || []);
       
     } catch (error: any) {
       console.log('❌ Fetch error:', error);
@@ -204,7 +206,6 @@ export default function HomeScreen() {
     }
     
     await api.clearAuth();
-    Alert.alert('Success', 'Logged out successfully');
     router.replace('/');
   };
 
@@ -236,6 +237,12 @@ export default function HomeScreen() {
 
   // When clicking the row, load/play the song and open the full modal player
   const handleRowPress = async (item: Music) => {
+    const filteredMusic = musicList.filter(song =>
+      song.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    const displayList = isSearching && searchQuery.trim() !== '' ? filteredMusic : musicList;
+    setContextMusicList(displayList);
+
     if (currentlyPlaying?._id !== item._id) {
       await play(item);
     }
@@ -244,6 +251,12 @@ export default function HomeScreen() {
 
   // When clicking the play/pause icon, toggle playback inline without showing modal
   const handlePlayIconPress = async (item: Music) => {
+    const filteredMusic = musicList.filter(song =>
+      song.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    const displayList = isSearching && searchQuery.trim() !== '' ? filteredMusic : musicList;
+    setContextMusicList(displayList);
+
     if (currentlyPlaying?._id === item._id) {
       if (isPlaying) {
         await pause();
@@ -281,7 +294,7 @@ export default function HomeScreen() {
             <Ionicons 
               name={isCurrentPlaying ? 'pause' : 'play'} 
               size={18} 
-              color="#007AFF" 
+              color="#BDB4FF" 
               style={isCurrentPlaying ? null : { marginLeft: 2 }}
             />
           </TouchableOpacity>
@@ -316,7 +329,7 @@ export default function HomeScreen() {
               <TextInput
                 style={styles.headerSearchInput}
                 placeholder="Search library..."
-                placeholderTextColor="#ddd"
+                placeholderTextColor="#7C7899"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus={true}
@@ -343,7 +356,7 @@ export default function HomeScreen() {
         {showEmptyState ? (
           searchLoading || isDownloading ? (
             <View style={styles.emptyContainer}>
-              <ActivityIndicator size="large" color="#007AFF" />
+              <ActivityIndicator size="large" color="#8B5CF6" />
               <Text style={styles.loadingStatusText}>
                 {isDownloading ? downloadMessage : 'Searching database...'}
               </Text>
@@ -358,7 +371,7 @@ export default function HomeScreen() {
             </View>
           ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name="cloud-download-outline" size={60} color="#999" style={{ marginBottom: 15 }} />
+              <Ionicons name="cloud-download-outline" size={60} color="#7C7899" style={{ marginBottom: 15 }} />
               <Text style={styles.emptyTextTitle}>Song not in library</Text>
               <Text style={styles.emptyTextSubtitle}>
                 "{searchQuery}" is not available in your library. Would you like to get this song from the cloud?
@@ -428,6 +441,7 @@ export default function HomeScreen() {
                   <TextInput
                     style={styles.formInput}
                     placeholder="Old Password"
+                    placeholderTextColor="#7C7899"
                     value={oldPassword}
                     onChangeText={setOldPassword}
                     secureTextEntry={!showProfilePassword}
@@ -440,7 +454,7 @@ export default function HomeScreen() {
                     <Ionicons 
                       name={showProfilePassword ? 'eye-off-outline' : 'eye-outline'} 
                       size={20} 
-                      color="#666" 
+                      color="#7C7899" 
                     />
                   </TouchableOpacity>
                 </View>
@@ -449,6 +463,7 @@ export default function HomeScreen() {
                   <TextInput
                     style={styles.formInput}
                     placeholder="New Password"
+                    placeholderTextColor="#7C7899"
                     value={newPassword}
                     onChangeText={setNewPassword}
                     secureTextEntry={!showProfilePassword}
@@ -460,6 +475,7 @@ export default function HomeScreen() {
                   <TextInput
                     style={styles.formInput}
                     placeholder="Confirm New Password"
+                    placeholderTextColor="#7C7899"
                     value={confirmNewPassword}
                     onChangeText={setConfirmNewPassword}
                     secureTextEntry={!showProfilePassword}
@@ -493,7 +509,7 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#8B5CF6" />
         <Text style={styles.loadingText}>Loading music...</Text>
       </View>
     );
@@ -529,7 +545,7 @@ export default function HomeScreen() {
             <Ionicons 
               name={isPlaying ? 'pause' : 'play'} 
               size={22} 
-              color="#007AFF" 
+              color="#BDB4FF" 
               style={isPlaying ? null : { marginLeft: 2 }}
             />
           </TouchableOpacity>
@@ -545,7 +561,7 @@ export default function HomeScreen() {
           <Ionicons 
             name={activeTab === 'songs' ? 'musical-notes' : 'musical-notes-outline'} 
             size={22} 
-            color={activeTab === 'songs' ? '#007AFF' : '#666'} 
+            color={activeTab === 'songs' ? '#BDB4FF' : '#7C7899'} 
           />
           <Text style={[styles.tabLabel, activeTab === 'songs' && styles.tabLabelActive]}>
             Songs
@@ -559,7 +575,7 @@ export default function HomeScreen() {
           <Ionicons 
             name={activeTab === 'profile' ? 'person' : 'person-outline'} 
             size={22} 
-            color={activeTab === 'profile' ? '#007AFF' : '#666'} 
+            color={activeTab === 'profile' ? '#BDB4FF' : '#7C7899'} 
           />
           <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>
             Profile
@@ -573,34 +589,36 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#130D22',
   },
   tabContentContainer: {
     flex: 1,
   },
   header: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#1C1330',
     padding: 20,
     paddingTop: 60,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#332354',
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#130D22',
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#666',
+    color: '#7C7899',
   },
   listContainer: {
     paddingHorizontal: 10,
@@ -610,26 +628,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   musicBoxPlaying: {
-    backgroundColor: '#E8F4FF',
-    borderColor: '#007AFF',
+    backgroundColor: '#251842',
+    borderColor: '#8B5CF6',
   },
   gridBox: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1C1330',
     borderRadius: 12,
     width: GRID_ITEM_WIDTH,
     marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#332354',
   },
   gridCover: {
     height: 120,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#130D22',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -646,7 +664,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#251842',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -661,12 +679,12 @@ const styles = StyleSheet.create({
   gridTitle: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   gridDuration: {
     fontSize: 12,
-    color: '#666',
+    color: '#7C7899',
   },
   emptyContainer: {
     flex: 1,
@@ -676,31 +694,31 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#999',
+    color: '#7C7899',
   },
   miniPlayerContainer: {
     position: 'absolute',
     bottom: 80, // Sit directly above bottom tab bar
     left: 15,
     right: 15,
-    backgroundColor: '#fff',
+    backgroundColor: '#1C1330',
     borderRadius: 12,
     padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 5,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#332354',
   },
   miniPlayerArt: {
     width: 40,
     height: 40,
     borderRadius: 6,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#251842',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -713,18 +731,18 @@ const styles = StyleSheet.create({
   miniPlayerTitle: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
   },
   miniPlayerSubtitle: {
     fontSize: 12,
-    color: '#007AFF',
+    color: '#BDB4FF',
     marginTop: 2,
   },
   miniPlayerPlayButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F0F7FF',
+    backgroundColor: '#251842',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -734,17 +752,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 65,
-    backgroundColor: '#fff',
+    backgroundColor: '#1C1330',
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#332354',
     paddingBottom: 10,
     justifyContent: 'space-around',
     alignItems: 'center',
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 5,
   },
   tabItem: {
@@ -754,33 +772,35 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   tabItemActive: {
-    backgroundColor: '#FAFDFE',
+    backgroundColor: 'transparent',
   },
   tabLabel: {
     fontSize: 11,
-    color: '#666',
+    color: '#7C7899',
     marginTop: 3,
     fontWeight: '500',
   },
   tabLabelActive: {
-    color: '#007AFF',
+    color: '#BDB4FF',
     fontWeight: 'bold',
   },
   headerSearchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: '#251842',
     borderRadius: 8,
     paddingHorizontal: 8,
     height: 40,
+    borderWidth: 1,
+    borderColor: '#332354',
   },
   headerBackButton: {
     marginRight: 8,
   },
   headerSearchInput: {
     flex: 1,
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
     paddingVertical: 5,
   },
@@ -793,7 +813,7 @@ const styles = StyleSheet.create({
   loadingStatusText: {
     marginTop: 15,
     fontSize: 16,
-    color: '#333',
+    color: '#FFFFFF',
     textAlign: 'center',
     paddingHorizontal: 30,
     fontWeight: '500',
@@ -801,12 +821,12 @@ const styles = StyleSheet.create({
   emptyTextTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   emptyTextSubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#7C7899',
     textAlign: 'center',
     paddingHorizontal: 40,
     marginBottom: 20,
@@ -815,11 +835,11 @@ const styles = StyleSheet.create({
   getSongButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: '#8B5CF6',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 25,
-    shadowColor: '#007AFF',
+    shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -839,10 +859,12 @@ const styles = StyleSheet.create({
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#1C1330',
     padding: 20,
     borderRadius: 12,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#332354',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -853,7 +875,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#8B5CF6',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -864,18 +886,20 @@ const styles = StyleSheet.create({
   profileUsername: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
   },
   profileEmail: {
     fontSize: 14,
-    color: '#666',
+    color: '#7C7899',
     marginTop: 2,
   },
   formCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1C1330',
     padding: 20,
     borderRadius: 12,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#332354',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -885,29 +909,29 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFFFFF',
     marginBottom: 15,
   },
   formInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#332354',
     borderRadius: 8,
     marginBottom: 15,
-    backgroundColor: '#fff',
+    backgroundColor: '#130D22',
   },
   formInput: {
     flex: 1,
     padding: 12,
     fontSize: 15,
-    color: '#333',
+    color: '#FFFFFF',
   },
   formEyeButton: {
     padding: 12,
   },
   formSubmitButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#8B5CF6',
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',

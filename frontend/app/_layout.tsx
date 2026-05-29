@@ -5,9 +5,9 @@ export default function RootLayout() {
   return (
     <AudioProvider>
       <Stack>
-        <Stack.Screen name="index" options={{ title: 'Login' }} />
-        <Stack.Screen name="register" options={{ title: 'Register' }} />
-        <Stack.Screen name="forgot-password" options={{ title: 'Reset Password' }} />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="register" options={{ headerShown: false }} />
+        <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
         <Stack.Screen 
           name="home" 
           options={{ 

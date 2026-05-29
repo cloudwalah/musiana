@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { View, TextInput, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, TextInput, Text, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/services/api';
 
@@ -43,116 +43,153 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
-      
-      <TextInput
-        style={styles.input}
-        placeholder="Username"
-        value={username}
-        onChangeText={setUsername}
-        autoCapitalize="none"
-      />
-      
-      <View style={styles.passwordContainer}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.logoContainer}>
+          <Ionicons name="musical-notes" size={70} color="#8B5CF6" style={styles.logoIcon} />
+          <Text style={styles.logoText}>MUSIANA</Text>
+        </View>
+        
         <TextInput
-          style={styles.passwordInput}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry={!showPassword}
+          style={styles.input}
+          placeholder="Username"
+          placeholderTextColor="#7C7899"
+          value={username}
+          onChangeText={setUsername}
           autoCapitalize="none"
         />
-        <TouchableOpacity 
-          style={styles.eyeButton}
-          onPress={() => setShowPassword(!showPassword)}
-        >
-          <Ionicons 
-            name={showPassword ? 'eye-off-outline' : 'eye-outline'} 
-            size={22} 
-            color="#666" 
+        
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Password"
+            placeholderTextColor="#7C7899"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            autoCapitalize="none"
           />
+          <TouchableOpacity 
+            style={styles.eyeButton}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            <Ionicons 
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'} 
+              size={22} 
+              color="#7C7899" 
+            />
+          </TouchableOpacity>
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.forgotContainer} 
+          onPress={() => router.push('/forgot-password')}
+        >
+          <Text style={styles.forgotText}>Forgot Password?</Text>
         </TouchableOpacity>
-      </View>
-      
-      <TouchableOpacity 
-        style={styles.forgotContainer} 
-        onPress={() => router.push('/forgot-password')}
-      >
-        <Text style={styles.forgotText}>Forgot Password?</Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity 
-        style={styles.button} 
-        onPress={handleLogin}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? 'Loading...' : 'Login'}
-        </Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity onPress={() => router.push('/register')}>
-        <Text style={styles.link}>Don't have an account? Register</Text>
-      </TouchableOpacity>
-    </View>
+        
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? 'Loading...' : 'Login'}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity onPress={() => router.push('/register')}>
+          <Text style={styles.link}>Don't have an account? Register</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#130D22',
   },
-  title: {
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 24,
+    paddingTop: 80,
+    paddingBottom: 40,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 50,
+  },
+  logoIcon: {
+    textShadowColor: 'rgba(139, 92, 246, 0.3)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 12,
+  },
+  logoText: {
     fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 40,
-    textAlign: 'center',
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 4,
+    marginTop: 12,
   },
   input: {
+    backgroundColor: '#1C1330',
     borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 15,
-    marginBottom: 15,
-    borderRadius: 8,
+    borderColor: '#332354',
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 12,
     fontSize: 16,
+    color: '#FFFFFF',
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#1C1330',
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    marginBottom: 10,
-    backgroundColor: '#fff',
+    borderColor: '#332354',
+    borderRadius: 12,
+    marginBottom: 12,
   },
   passwordInput: {
     flex: 1,
-    padding: 15,
+    padding: 16,
     fontSize: 16,
+    color: '#FFFFFF',
   },
   eyeButton: {
-    padding: 15,
+    paddingHorizontal: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   forgotContainer: {
     alignSelf: 'flex-end',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   forgotText: {
-    color: '#007AFF',
+    color: '#BDB4FF',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   button: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 8,
-    marginTop: 10,
+    backgroundColor: '#8B5CF6',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 8,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   buttonText: {
     color: '#fff',
@@ -161,8 +198,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   link: {
-    color: '#007AFF',
+    color: '#BDB4FF',
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 24,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
