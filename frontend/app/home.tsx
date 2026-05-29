@@ -8,7 +8,7 @@ import { useAudio, Music } from '../src/context/AudioContext';
 const { width } = Dimensions.get('window');
 const GRID_ITEM_WIDTH = (width - 30) / 2;
 
-type TabType = 'songs' | 'search' | 'profile';
+type TabType = 'songs' | 'profile';
 
 export default function HomeScreen() {
   const [musicList, setMusicList] = useState<Music[]>([]);
@@ -17,14 +17,14 @@ export default function HomeScreen() {
   // Navigation & UI States
   const [activeTab, setActiveTab] = useState<TabType>('songs');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   
   // Auto-Downloader Search States
-  const [searchResults, setSearchResults] = useState<Music[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadMessage, setDownloadMessage] = useState('');
-  const [hasSearched, setHasSearched] = useState(false);
   const [pollingIntervalId, setPollingIntervalId] = useState<any>(null);
+  const [isUnavailable, setIsUnavailable] = useState(false);
   
   // Profile & User States
   const [user, setUser] = useState<{ username: string; email: string } | null>(null);
@@ -66,10 +66,8 @@ export default function HomeScreen() {
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
-    if (tab !== 'search') {
-      stopPolling();
-      setIsDownloading(false);
-      setSearchLoading(false);
+    if (tab !== 'songs') {
+      handleCancelSearch();
     }
   };
 
@@ -83,9 +81,9 @@ export default function HomeScreen() {
           clearInterval(intervalId);
           setPollingIntervalId(null);
           
-          setSearchResults(response.data || []);
           setIsDownloading(false);
           setSearchLoading(false);
+          setIsUnavailable(false);
           
           // Refresh general library
           fetchMusic();
@@ -93,6 +91,13 @@ export default function HomeScreen() {
           if (response.message) {
             setDownloadMessage(response.message);
           }
+        } else {
+          console.log(`❌ Download failed for: "${query}"`);
+          clearInterval(intervalId);
+          setPollingIntervalId(null);
+          setIsDownloading(false);
+          setSearchLoading(false);
+          setIsUnavailable(true);
         }
       } catch (err) {
         console.log('Error during search polling:', err);
@@ -104,7 +109,6 @@ export default function HomeScreen() {
 
   const handleSearchSubmit = async () => {
     if (!searchQuery.trim()) {
-      Alert.alert('Empty Search', 'Please type a song title to search');
       return;
     }
     
@@ -112,7 +116,7 @@ export default function HomeScreen() {
     setSearchLoading(true);
     setIsDownloading(false);
     setDownloadMessage('');
-    setHasSearched(true);
+    setIsUnavailable(false);
     
     try {
       const response = await api.searchMusic(searchQuery);
@@ -122,37 +126,38 @@ export default function HomeScreen() {
           setDownloadMessage(response.message || 'Downloading your song... Please wait.');
           startPolling(searchQuery);
         } else {
-          setSearchResults(response.data || []);
           setSearchLoading(false);
+          setIsUnavailable(false);
           fetchMusic();
         }
       } else {
-        Alert.alert('Error', response.message || 'Search failed');
+        setIsDownloading(false);
         setSearchLoading(false);
+        setIsUnavailable(true);
       }
     } catch (error: any) {
       console.log('❌ Search Error:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to search song');
+      setIsDownloading(false);
       setSearchLoading(false);
+      setIsUnavailable(true);
     }
   };
 
   const handleClearSearch = () => {
     setSearchQuery('');
-    setSearchResults([]);
-    setHasSearched(false);
     setIsDownloading(false);
     setSearchLoading(false);
+    setIsUnavailable(false);
     stopPolling();
   };
 
-  const getSearchData = () => {
-    if (hasSearched) {
-      return searchResults;
-    }
-    return musicList.filter(song =>
-      song.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+  const handleCancelSearch = () => {
+    setIsSearching(false);
+    setSearchQuery('');
+    setIsDownloading(false);
+    setSearchLoading(false);
+    setIsUnavailable(false);
+    stopPolling();
   };
 
   const loadUser = async () => {
@@ -292,14 +297,79 @@ export default function HomeScreen() {
   // --- SUB TAB RENDERS ---
 
   const renderSongsTab = () => {
+    const filteredMusic = musicList.filter(song =>
+      song.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const displayList = isSearching && searchQuery.trim() !== '' ? filteredMusic : musicList;
+    const showEmptyState = isSearching && searchQuery.trim() !== '' && filteredMusic.length === 0;
+
     return (
       <View style={styles.tabContentContainer}>
         {/* Songs Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Musiana Library</Text>
+          {isSearching ? (
+            <View style={styles.headerSearchContainer}>
+              <TouchableOpacity onPress={handleCancelSearch} style={styles.headerBackButton}>
+                <Ionicons name="arrow-back" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TextInput
+                style={styles.headerSearchInput}
+                placeholder="Search library..."
+                placeholderTextColor="#ddd"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus={true}
+                autoCapitalize="none"
+                returnKeyType="search"
+                onSubmitEditing={handleSearchSubmit}
+              />
+              {searchQuery ? (
+                <TouchableOpacity onPress={handleClearSearch} style={styles.headerClearButton}>
+                  <Ionicons name="close-circle" size={18} color="#fff" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : (
+            <>
+              <Text style={styles.headerTitle}>Musiana Library</Text>
+              <TouchableOpacity onPress={() => setIsSearching(true)} style={styles.headerSearchIcon}>
+                <Ionicons name="search" size={24} color="#fff" />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
-        {musicList.length === 0 ? (
+        {showEmptyState ? (
+          searchLoading || isDownloading ? (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.loadingStatusText}>
+                {isDownloading ? downloadMessage : 'Searching database...'}
+              </Text>
+            </View>
+          ) : isUnavailable ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="alert-circle-outline" size={60} color="#FF3B30" style={{ marginBottom: 15 }} />
+              <Text style={styles.emptyTextTitle}>Song not available</Text>
+              <Text style={styles.emptyTextSubtitle}>
+                "{searchQuery}" could not be downloaded from the cloud. Please check again later!
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cloud-download-outline" size={60} color="#999" style={{ marginBottom: 15 }} />
+              <Text style={styles.emptyTextTitle}>Song not in library</Text>
+              <Text style={styles.emptyTextSubtitle}>
+                "{searchQuery}" is not available in your library. Would you like to get this song from the cloud?
+              </Text>
+              <TouchableOpacity style={styles.getSongButton} onPress={handleSearchSubmit}>
+                <Ionicons name="download-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.getSongButtonText}>Get the Song</Text>
+              </TouchableOpacity>
+            </View>
+          )
+        ) : displayList.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No music available</Text>
           </View>
@@ -307,83 +377,7 @@ export default function HomeScreen() {
           <FlatList
             key="grid"
             numColumns={2}
-            data={musicList}
-            renderItem={renderMusicItem}
-            keyExtractor={(item) => item._id}
-            extraData={{ currentlyPlaying, isPlaying }}
-            contentContainerStyle={[
-              styles.listContainer,
-              currentlyPlaying ? { paddingBottom: 160 } : { paddingBottom: 80 }
-            ]}
-            columnWrapperStyle={styles.gridRow}
-          />
-        )}
-      </View>
-    );
-  };
-
-  const renderSearchTab = () => {
-    const searchData = getSearchData();
-
-    return (
-      <View style={styles.tabContentContainer}>
-        {/* Search Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Search Music</Text>
-        </View>
-
-        {/* Search Input Bar & Button */}
-        <View style={styles.searchRow}>
-          <View style={styles.searchBarContainer}>
-            <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search songs by title..."
-              value={searchQuery}
-              onChangeText={(text) => {
-                setSearchQuery(text);
-                if (hasSearched) {
-                  setHasSearched(false);
-                  stopPolling();
-                }
-              }}
-              onSubmitEditing={handleSearchSubmit}
-              placeholderTextColor="#999"
-              autoCapitalize="none"
-              returnKeyType="search"
-            />
-            {searchQuery ? (
-              <TouchableOpacity onPress={handleClearSearch} style={styles.clearSearchButton}>
-                <Ionicons name="close-circle" size={18} color="#666" />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-          <TouchableOpacity style={styles.searchButton} onPress={handleSearchSubmit}>
-            <Text style={styles.searchButtonText}>Search</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Loading / Downloading Spinner */}
-        {searchLoading || isDownloading ? (
-          <View style={styles.emptyContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingStatusText}>
-              {isDownloading ? downloadMessage : 'Searching database...'}
-            </Text>
-          </View>
-        ) : searchData.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {hasSearched 
-                ? 'No matching songs found in the database. Tap search to find/download from YouTube.' 
-                : 'Type a song title and tap Search.'}
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            key="search-grid"
-            numColumns={2}
-            data={searchData}
+            data={displayList}
             renderItem={renderMusicItem}
             keyExtractor={(item) => item._id}
             extraData={{ currentlyPlaying, isPlaying }}
@@ -509,7 +503,6 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* Tab Switcher Body */}
       {activeTab === 'songs' && renderSongsTab()}
-      {activeTab === 'search' && renderSearchTab()}
       {activeTab === 'profile' && renderProfileTab()}
 
       {/* Floating Mini Player Bar (Above bottom tab bar) */}
@@ -556,20 +549,6 @@ export default function HomeScreen() {
           />
           <Text style={[styles.tabLabel, activeTab === 'songs' && styles.tabLabelActive]}>
             Songs
-          </Text>
-        </TouchableOpacity>
- 
-        <TouchableOpacity 
-          style={[styles.tabItem, activeTab === 'search' && styles.tabItemActive]}
-          onPress={() => handleTabChange('search')}
-        >
-          <Ionicons 
-            name={activeTab === 'search' ? 'search' : 'search-outline'} 
-            size={22} 
-            color={activeTab === 'search' ? '#007AFF' : '#666'} 
-          />
-          <Text style={[styles.tabLabel, activeTab === 'search' && styles.tabLabelActive]}>
-            Search
           </Text>
         </TouchableOpacity>
  
@@ -787,37 +766,29 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontWeight: 'bold',
   },
-  searchRow: {
+  headerSearchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 15,
-    marginTop: 15,
-    marginBottom: 5,
-  },
-  searchBarContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    height: 45,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    height: 40,
   },
-  searchButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 15,
-    height: 45,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 10,
+  headerBackButton: {
+    marginRight: 8,
   },
-  searchButtonText: {
+  headerSearchInput: {
+    flex: 1,
     color: '#fff',
-    fontSize: 15,
-    fontWeight: 'bold',
+    fontSize: 16,
+    paddingVertical: 5,
+  },
+  headerClearButton: {
+    padding: 4,
+  },
+  headerSearchIcon: {
+    padding: 4,
   },
   loadingStatusText: {
     marginTop: 15,
@@ -827,17 +798,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     fontWeight: '500',
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 45,
-    fontSize: 16,
+  emptyTextTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
     color: '#333',
+    marginBottom: 8,
   },
-  clearSearchButton: {
-    padding: 5,
+  emptyTextSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  getSongButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  getSongButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   profileScrollContainer: {
     flexGrow: 1,

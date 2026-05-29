@@ -1,4 +1,9 @@
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
+
+// Ensure standard Mac package paths are in the process environment PATH so child processes can resolve yt-dlp and ffmpeg
+if (process.env.PATH && !process.env.PATH.includes('/opt/homebrew/bin')) {
+  process.env.PATH = `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}`;
+}
 const util = require('util');
 const path = require('path');
 const fs = require('fs');
@@ -7,8 +12,10 @@ const Music = require('../models/Music');
 
 const execPromise = util.promisify(exec);
 
-// In-memory set to prevent multiple users from launching concurrent downloads for the same search query
-const activeDownloads = new Set();
+// Map to track active download states and progress in real-time
+// Key: cleanQuery (trimmed, lowercase)
+// Value: { status: 'searching' | 'downloading' | 'uploading' | 'failed', progress: number, error?: string, timestamp: number }
+const downloadStates = new Map();
 
 /**
  * Background worker to download audio from YouTube, upload to Cloudinary, and save to MongoDB
@@ -17,12 +24,21 @@ const activeDownloads = new Set();
 const downloadAndUpload = async (query) => {
   const cleanQuery = query.trim().toLowerCase();
   
-  if (activeDownloads.has(cleanQuery)) {
-    console.log(`⏩ Already downloading query: "${query}"`);
-    return;
+  if (downloadStates.has(cleanQuery)) {
+    const currentState = downloadStates.get(cleanQuery);
+    if (currentState.status !== 'failed') {
+      console.log(`⏩ Already downloading query: "${query}"`);
+      return;
+    }
   }
 
-  activeDownloads.add(cleanQuery);
+  // Initialize status as searching
+  downloadStates.set(cleanQuery, {
+    status: 'searching',
+    progress: 0,
+    timestamp: Date.now()
+  });
+  
   console.log(`📥 Downloader started for query: "${query}"`);
 
   let tempFile = '';
@@ -47,7 +63,31 @@ const downloadAndUpload = async (query) => {
     const existing = await Music.findOne({ title });
     if (existing) {
       console.log(`⏩ Song "${title}" already exists in DB, skipping download.`);
-      activeDownloads.delete(cleanQuery);
+      
+      // Update its searchQueries to map this spelling to this song
+      if (!existing.searchQueries) {
+        existing.searchQueries = [];
+      }
+      if (!existing.searchQueries.includes(cleanQuery)) {
+        existing.searchQueries.push(cleanQuery);
+        await existing.save();
+      }
+
+      // Mark the state as success and pass the data so polling retrieves it
+      downloadStates.set(cleanQuery, {
+        status: 'success',
+        progress: 100,
+        data: existing,
+        timestamp: Date.now()
+      });
+
+      // Automatically clean up this state from map in 20 seconds
+      setTimeout(() => {
+        if (downloadStates.get(cleanQuery)?.status === 'success') {
+          downloadStates.delete(cleanQuery);
+        }
+      }, 20000);
+
       return;
     }
 
@@ -55,9 +95,57 @@ const downloadAndUpload = async (query) => {
     tempFile = path.join(__dirname, `../uploads/temp_${Date.now()}`);
     console.log(`📥 Downloading audio stream from YouTube...`);
     
-    // Command extracts audio and transcodes to MP3 format locally
-    const downloadCommand = `yt-dlp --extract-audio --audio-format mp3 --audio-quality 0 --output "${tempFile}.%(ext)s" "https://www.youtube.com/watch?v=${videoId}" || yt-dlp --extract-audio --audio-format mp3 --audio-quality 0 --output "${tempFile}.%(ext)s" "ytsearch1:${query}"`;
-    await execPromise(downloadCommand);
+    // Update state to downloading
+    downloadStates.set(cleanQuery, {
+      status: 'downloading',
+      progress: 0,
+      timestamp: Date.now()
+    });
+
+    const downloadProcess = spawn('yt-dlp', [
+      '--extract-audio',
+      '--audio-format',
+      'mp3',
+      '--audio-quality',
+      '0',
+      '--output',
+      `${tempFile}.%(ext)s`,
+      `https://www.youtube.com/watch?v=${videoId}`
+    ]);
+
+    await new Promise((resolve, reject) => {
+      downloadProcess.stdout.on('data', (data) => {
+        const str = data.toString();
+        const match = str.match(/\[download\]\s+([\d.]+)%/);
+        if (match) {
+          const progress = parseFloat(match[1]);
+          console.log(`📥 Download progress for "${query}": ${progress}%`);
+          downloadStates.set(cleanQuery, {
+            status: 'downloading',
+            progress: Math.round(progress),
+            timestamp: Date.now()
+          });
+        }
+      });
+
+      downloadProcess.stderr.on('data', (data) => {
+        // Log stderr warnings but don't fail yet
+        console.log(`yt-dlp stderr: ${data.toString().trim()}`);
+      });
+
+      downloadProcess.on('error', (err) => {
+        console.error('Spawn error:', err);
+        reject(err);
+      });
+
+      downloadProcess.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`yt-dlp exited with code ${code}`));
+        }
+      });
+    });
 
     const localFile = `${tempFile}.mp3`;
     if (!fs.existsSync(localFile)) {
@@ -65,6 +153,13 @@ const downloadAndUpload = async (query) => {
     }
 
     console.log(`📤 Uploading "${title}" to Cloudinary...`);
+    
+    // Update state to uploading
+    downloadStates.set(cleanQuery, {
+      status: 'uploading',
+      progress: 90,
+      timestamp: Date.now()
+    });
 
     // 3. Upload audio file to Cloudinary
     const audioResult = await cloudinary.uploader.upload(localFile, {
@@ -94,18 +189,49 @@ const downloadAndUpload = async (query) => {
     const formattedDuration = `${minutes}:${seconds}`;
 
     // 6. Save document to MongoDB
-    await Music.create({
+    const newMusic = await Music.create({
       title,
       url: audioResult.secure_url,
       public_id: audioResult.public_id,
       duration: formattedDuration,
-      imageUrl
+      imageUrl,
+      searchQueries: [cleanQuery]
     });
 
     console.log(`✅ Successfully auto-downloaded and registered "${title}"`);
+    
+    // Set status to success so polling returns the new record
+    downloadStates.set(cleanQuery, {
+      status: 'success',
+      progress: 100,
+      data: newMusic,
+      timestamp: Date.now()
+    });
+
+    // Clean up from state map after 20 seconds
+    setTimeout(() => {
+      if (downloadStates.get(cleanQuery)?.status === 'success') {
+        downloadStates.delete(cleanQuery);
+      }
+    }, 20000);
 
   } catch (error) {
     console.error(`❌ Downloader failed for query "${query}":`, error.message);
+    downloadStates.set(cleanQuery, {
+      status: 'failed',
+      progress: 0,
+      error: error.message,
+      timestamp: Date.now()
+    });
+
+    // Automatically remove failed state after 5 minutes so user can retry later
+    setTimeout(() => {
+      if (downloadStates.get(cleanQuery)?.status === 'failed') {
+        downloadStates.delete(cleanQuery);
+        console.log(`🧹 Cleared failed status for query: "${query}"`);
+      }
+    }, 5 * 60 * 1000);
+
   } finally {
     // Clean up temporary local files
     if (tempFile) {
@@ -119,12 +245,10 @@ const downloadAndUpload = async (query) => {
         }
       }
     }
-    // Remove query from active download set
-    activeDownloads.delete(cleanQuery);
   }
 };
 
 module.exports = {
-  activeDownloads,
+  downloadStates,
   downloadAndUpload
 };

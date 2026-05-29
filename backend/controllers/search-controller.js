@@ -1,4 +1,4 @@
-const { activeDownloads, downloadAndUpload } = require('../helpers/downloader');
+const { downloadStates, downloadAndUpload } = require('../helpers/downloader');
 const Music = require('../models/Music');
 
 /**
@@ -15,10 +15,14 @@ const searchMusic = async (req, res) => {
     }
 
     const cleanQuery = query.trim();
+    const cleanQueryLower = cleanQuery.toLowerCase();
 
-    // 1. Search existing music in MongoDB first (case-insensitive regex)
+    // 1. Search existing music in MongoDB first (case-insensitive title regex OR matching search query alias)
     const results = await Music.find({
-      title: { $regex: cleanQuery, $options: 'i' }
+      $or: [
+        { title: { $regex: cleanQuery, $options: 'i' } },
+        { searchQueries: cleanQueryLower }
+      ]
     });
 
     if (results.length > 0) {
@@ -30,13 +34,32 @@ const searchMusic = async (req, res) => {
     }
 
     // 2. If not found in DB, check if it is already in the download queue
-    const isCurrentlyDownloading = activeDownloads.has(cleanQuery.toLowerCase());
+    const activeState = downloadStates.get(cleanQueryLower);
 
-    if (isCurrentlyDownloading) {
+    if (activeState) {
+      if (activeState.status === 'failed') {
+        return res.status(200).json({
+          success: false,
+          downloading: false,
+          error: 'Song not available, please check again later!'
+        });
+      }
+
+      if (activeState.status === 'success') {
+        // Immediately return the song if the download finished during polling
+        return res.status(200).json({
+          success: true,
+          downloading: false,
+          data: [activeState.data]
+        });
+      }
+
       return res.status(200).json({
         success: true,
         downloading: true,
-        message: `"${cleanQuery}" is already being downloaded. Please wait a moment.`
+        status: activeState.status,
+        progress: activeState.progress,
+        message: `Downloading "${cleanQuery}": ${activeState.status} (${activeState.progress}%)`
       });
     }
 
@@ -46,6 +69,8 @@ const searchMusic = async (req, res) => {
     return res.status(202).json({
       success: true,
       downloading: true,
+      status: 'searching',
+      progress: 0,
       message: `Searching the cloud and downloading "${cleanQuery}"... This will take a few moments.`
     });
 

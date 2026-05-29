@@ -22,6 +22,10 @@ const MusicSchema = new mongoose.Schema({
     imageUrl: {
         type: String,
         default: ''
+    },
+    searchQueries: {
+        type: [String],
+        default: []
     }
 }, {timestamps: true})
 
