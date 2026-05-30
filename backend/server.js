@@ -43,8 +43,20 @@ app.get('/api/debug', async (req, res) => {
     }
 
     const fs = require('fs');
-    const cookiesPath = path.join(__dirname, 'cookies.txt');
-    const hasCookies = fs.existsSync(cookiesPath);
+    let cookiesPath = null;
+    const potentialCookiesPaths = [
+        path.join(__dirname, 'cookies.txt'),          // backend/cookies.txt
+        path.join(__dirname, '../cookies.txt'),       // repository root/cookies.txt
+        '/opt/render/project/src/cookies.txt',        // absolute path on Render repo root
+        '/opt/render/project/src/backend/cookies.txt' // absolute path on Render backend
+    ];
+    for (const p of potentialCookiesPaths) {
+        if (fs.existsSync(p)) {
+            cookiesPath = p;
+            break;
+        }
+    }
+    const hasCookies = cookiesPath !== null;
 
     const debugInfo = {
         platform: process.platform,

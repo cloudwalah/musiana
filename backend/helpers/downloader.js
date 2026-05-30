@@ -33,8 +33,20 @@ const Music = require('../models/Music');
 const execPromise = util.promisify(exec);
 
 // Path to cookies.txt if provided (Render Secret File or local copy)
-const cookiesPath = path.join(__dirname, '../cookies.txt');
-const hasCookies = fs.existsSync(cookiesPath);
+let cookiesPath = null;
+const potentialCookiesPaths = [
+  path.join(__dirname, '../cookies.txt'),          // backend/cookies.txt
+  path.join(__dirname, '../../cookies.txt'),       // repository root/cookies.txt
+  '/opt/render/project/src/cookies.txt',           // absolute path on Render repo root
+  '/opt/render/project/src/backend/cookies.txt'    // absolute path on Render backend
+];
+for (const p of potentialCookiesPaths) {
+  if (fs.existsSync(p)) {
+    cookiesPath = p;
+    break;
+  }
+}
+const hasCookies = cookiesPath !== null;
 
 // Map to track active download states and progress in real-time
 // Key: cleanQuery (trimmed, lowercase)
