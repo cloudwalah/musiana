@@ -58,6 +58,8 @@ export default function TrimScreen() {
   const soundRef = useRef<Audio.Sound | null>(null);
   const trimStartRef = useRef(0);
   const trimEndRef = useRef(initialDuration);
+  const sliderWidthRef = useRef(0);
+  const totalDurationRef = useRef(initialDuration);
 
   // Store absolute drag grant values
   const startValOnGrant = useRef(0);
@@ -70,6 +72,14 @@ export default function TrimScreen() {
   useEffect(() => {
     trimEndRef.current = trimEnd;
   }, [trimEnd]);
+
+  useEffect(() => {
+    sliderWidthRef.current = sliderWidth;
+  }, [sliderWidth]);
+
+  useEffect(() => {
+    totalDurationRef.current = totalDuration;
+  }, [totalDuration]);
 
   // Load local track on mount
   useEffect(() => {
@@ -202,8 +212,8 @@ export default function TrimScreen() {
         startValOnGrant.current = trimStartRef.current;
       },
       onPanResponderMove: (evt, gestureState) => {
-        if (!sliderWidth) return;
-        const timeDelta = (gestureState.dx / sliderWidth) * totalDuration;
+        if (!sliderWidthRef.current) return;
+        const timeDelta = (gestureState.dx / sliderWidthRef.current) * totalDurationRef.current;
         const targetVal = Math.max(0, Math.min(startValOnGrant.current + timeDelta, trimEndRef.current));
         setTrimStart(Math.round(targetVal * 100) / 100);
       }
@@ -220,9 +230,9 @@ export default function TrimScreen() {
         endValOnGrant.current = trimEndRef.current;
       },
       onPanResponderMove: (evt, gestureState) => {
-        if (!sliderWidth) return;
-        const timeDelta = (gestureState.dx / sliderWidth) * totalDuration;
-        const targetVal = Math.max(trimStartRef.current, Math.min(endValOnGrant.current + timeDelta, totalDuration));
+        if (!sliderWidthRef.current) return;
+        const timeDelta = (gestureState.dx / sliderWidthRef.current) * totalDurationRef.current;
+        const targetVal = Math.max(trimStartRef.current, Math.min(endValOnGrant.current + timeDelta, totalDurationRef.current));
         setTrimEnd(Math.round(targetVal * 100) / 100);
       }
     })
@@ -331,8 +341,6 @@ export default function TrimScreen() {
 
           {/* Unified Timeline & Double Pointer Track */}
           <View style={styles.timelineWrapper}>
-            <Text style={styles.sectionLabel}>VISUAL TIMELINE & SELECTION</Text>
-            
             <View 
               style={styles.trackContainer}
               onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
