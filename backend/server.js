@@ -42,10 +42,16 @@ app.get('/api/debug', async (req, res) => {
         console.warn('⚠️ Could not load ffmpeg-static in debug:', ffmpegErr.message);
     }
 
+    const fs = require('fs');
+    const cookiesPath = path.join(__dirname, 'cookies.txt');
+    const hasCookies = fs.existsSync(cookiesPath);
+
     const debugInfo = {
         platform: process.platform,
         nodeVersion: process.version,
         envPath: process.env.PATH,
+        cookiesDetected: hasCookies,
+        cookiesPath: cookiesPath,
         ytDlpPath: null,
         ffmpegPath: null,
         ytDlpVersion: null,
@@ -95,8 +101,9 @@ app.get('/api/debug', async (req, res) => {
         debugInfo.errors.push(`yt-dlp --version failed: ${e.message}`);
     }
 
+    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : '';
     try {
-        const { stdout } = await execPromise(`${ytDlpCmd} --print "%(title)s" "ytsearch1:adele hello"`);
+        const { stdout } = await execPromise(`${ytDlpCmd} ${cookiesArg} --print "%(title)s" "ytsearch1:adele hello"`);
         debugInfo.testSearch = stdout.trim();
     } catch (e) {
         debugInfo.errors.push(`test search failed: ${e.message}`);

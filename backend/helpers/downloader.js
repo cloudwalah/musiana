@@ -32,6 +32,10 @@ const Music = require('../models/Music');
 
 const execPromise = util.promisify(exec);
 
+// Path to cookies.txt if provided (Render Secret File or local copy)
+const cookiesPath = path.join(__dirname, '../cookies.txt');
+const hasCookies = fs.existsSync(cookiesPath);
+
 // Map to track active download states and progress in real-time
 // Key: cleanQuery (trimmed, lowercase)
 // Value: { status: 'searching' | 'downloading' | 'uploading' | 'failed', progress: number, error?: string, timestamp: number }
@@ -66,7 +70,8 @@ const downloadAndUpload = async (query) => {
   try {
     // 1. Search YouTube and extract metadata (title, video id, thumbnail URL)
     console.log(`🔍 Searching YouTube for: "${query}"`);
-    const { stdout } = await execPromise(`yt-dlp --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch1:${query}"`);
+    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : '';
+    const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch1:${query}"`);
     
     const parts = stdout.trim().split('###');
     if (parts.length < 3) {
@@ -122,7 +127,11 @@ const downloadAndUpload = async (query) => {
       timestamp: Date.now()
     });
 
-    const downloadProcess = spawn('yt-dlp', [
+    const downloadArgs = [];
+    if (hasCookies) {
+      downloadArgs.push('--cookies', cookiesPath);
+    }
+    downloadArgs.push(
       '--extract-audio',
       '--audio-format',
       'mp3',
@@ -131,7 +140,9 @@ const downloadAndUpload = async (query) => {
       '--output',
       `${tempFile}.%(ext)s`,
       `https://www.youtube.com/watch?v=${videoId}`
-    ]);
+    );
+
+    const downloadProcess = spawn('yt-dlp', downloadArgs);
 
     await new Promise((resolve, reject) => {
       downloadProcess.stdout.on('data', (data) => {
