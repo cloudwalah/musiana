@@ -84,7 +84,7 @@ const downloadAndUpload = async (query) => {
     // 1. Search YouTube and extract metadata (title, video id, thumbnail URL)
     console.log(`🔍 Searching YouTube for: "${query}"`);
     const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : '';
-    const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch1:${query}"`);
+    const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --js-runtimes node --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch1:${query}"`);
     
     const parts = stdout.trim().split('###');
     if (parts.length < 3) {
@@ -145,6 +145,7 @@ const downloadAndUpload = async (query) => {
       downloadArgs.push('--cookies', cookiesPath);
     }
     downloadArgs.push(
+      '--js-runtimes', 'node',
       '--extract-audio',
       '--audio-format',
       'mp3',

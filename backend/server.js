@@ -116,7 +116,7 @@ app.get('/api/debug', async (req, res) => {
 
     const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : '';
     try {
-        const { stdout } = await execPromise(`${ytDlpCmd} ${cookiesArg} --print "%(title)s" "ytsearch1:adele hello"`);
+        const { stdout } = await execPromise(`${ytDlpCmd} ${cookiesArg} --js-runtimes node --print "%(title)s" "ytsearch1:adele hello"`);
         debugInfo.testSearch = stdout.trim();
     } catch (e) {
         debugInfo.errors.push(`test search failed: ${e.message}`);
