@@ -135,5 +135,33 @@ export const api = {
   clearAuth: async () => {
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('user');
+  },
+
+  // Get all users (Admin only)
+  getAllUsers: async () => {
+    const token = await AsyncStorage.getItem('token');
+    console.log('🚀 Admin: Fetching all users...');
+    
+    const response = await axios.get(`${API_URL}/users`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    return response.data;
+  },
+
+  // Promote a user to admin (Admin only)
+  promoteUser: async (userId) => {
+    const token = await AsyncStorage.getItem('token');
+    console.log(`🚀 Admin: Promoting user ${userId} to admin...`);
+    
+    const response = await axios.put(`${API_URL}/users/${userId}/promote`, {}, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    return response.data;
   }
 };

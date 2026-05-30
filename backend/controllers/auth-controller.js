@@ -182,4 +182,54 @@ const forgotPassword = async (req, res) => {
     }
 }
 
-module.exports = { register, login, changePassword, forgotPassword }
+const getAllUsers = async (req, res) => {
+    try {
+        const users = await User.find({}, 'username email role');
+        res.status(200).json({
+            success: true,
+            data: users
+        });
+    } catch (error) {
+        console.error('❌ Get Users Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve users',
+            error: error.message
+        });
+    }
+}
+
+const promoteUserToAdmin = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        user.role = 'admin';
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: `User ${user.username} has been promoted to admin successfully`,
+            data: {
+                username: user.username,
+                email: user.email,
+                role: user.role
+            }
+        });
+    } catch (error) {
+        console.error('❌ Promote User Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to promote user to admin',
+            error: error.message
+        });
+    }
+}
+
+module.exports = { register, login, changePassword, forgotPassword, getAllUsers, promoteUserToAdmin }

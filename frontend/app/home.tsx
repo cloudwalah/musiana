@@ -28,12 +28,16 @@ export default function HomeScreen() {
   const [isUnavailable, setIsUnavailable] = useState(false);
   
   // Profile & User States
-  const [user, setUser] = useState<{ username: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ username: string; email: string; role?: string } | null>(null);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [showProfilePassword, setShowProfilePassword] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
+
+  // Admin User Management States
+  const [allUsers, setAllUsers] = useState<{ _id: string; username: string; email: string; role: string }[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
   // Consume audio playback controls and states from global context
   const { 
@@ -168,9 +172,52 @@ export default function HomeScreen() {
       const userData = await api.getUser();
       console.log('👤 Loaded user data in home.tsx:', userData);
       setUser(userData);
+      if (userData && userData.role === 'admin') {
+        setUsersLoading(true);
+        try {
+          const response = await api.getAllUsers();
+          if (response.success) {
+            setAllUsers(response.data || []);
+          }
+        } catch (fetchUsersErr) {
+          console.log('Error fetching users:', fetchUsersErr);
+        } finally {
+          setUsersLoading(false);
+        }
+      }
     } catch (err) {
       console.log('Error loading user:', err);
     }
+  };
+
+  const handlePromoteToAdmin = async (userId: string, targetUsername: string) => {
+    Alert.alert(
+      'Promote User',
+      `Are you sure you want to promote "${targetUsername}" to Admin?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Promote', 
+          style: 'default',
+          onPress: async () => {
+            try {
+              const response = await api.promoteUser(userId);
+              if (response.success) {
+                Alert.alert('Success', `"${targetUsername}" promoted to admin successfully!`);
+                // Refresh list
+                const usersResponse = await api.getAllUsers();
+                if (usersResponse.success) {
+                  setAllUsers(usersResponse.data || []);
+                }
+              }
+            } catch (err: any) {
+              console.log('Promote error:', err);
+              Alert.alert('Error', err.response?.data?.message || 'Failed to promote user');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const fetchMusic = async () => {
@@ -492,6 +539,42 @@ export default function HomeScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Admin User Management Section */}
+              {user?.role === 'admin' && (
+                <View style={styles.formCard}>
+                  <Text style={styles.formTitle}>Manage Users (Admin Only)</Text>
+                  
+                  {usersLoading ? (
+                    <ActivityIndicator size="small" color="#8B5CF6" style={{ marginVertical: 10 }} />
+                  ) : allUsers.length === 0 ? (
+                    <Text style={styles.emptyText}>No users registered</Text>
+                  ) : (
+                    allUsers.map((u) => (
+                      <View key={u._id} style={styles.userRow}>
+                        <View style={styles.userInfo}>
+                          <Text style={styles.userRowUsername}>{u.username}</Text>
+                          <Text style={styles.userRowEmail}>{u.email}</Text>
+                          <Text style={[
+                            styles.userRoleBadge,
+                            u.role === 'admin' ? styles.userRoleAdmin : styles.userRoleUser
+                          ]}>
+                            {u.role.toUpperCase()}
+                          </Text>
+                        </View>
+                        {u.role !== 'admin' && (
+                          <TouchableOpacity 
+                            style={styles.promoteButton}
+                            onPress={() => handlePromoteToAdmin(u._id, u.username)}
+                          >
+                            <Text style={styles.promoteButtonText}>Promote</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
 
               {/* Logout button */}
               <TouchableOpacity style={styles.profileLogoutButton} onPress={handleLogout}>
@@ -1020,5 +1103,56 @@ const styles = StyleSheet.create({
   },
   logoutIcon: {
     marginRight: 8,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#130D22',
+  },
+  userInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  userRowUsername: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  userRowEmail: {
+    fontSize: 12,
+    color: '#7C7899',
+    marginTop: 2,
+  },
+  userRoleBadge: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+  },
+  userRoleAdmin: {
+    backgroundColor: '#8B5CF6',
+    color: '#FFFFFF',
+  },
+  userRoleUser: {
+    backgroundColor: '#251842',
+    color: '#7C7899',
+  },
+  promoteButton: {
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  promoteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

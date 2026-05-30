@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import { Audio, AVPlaybackStatus, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 
 export interface Music {
   _id: string;
@@ -131,6 +131,10 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldRouteThroughEarpieceIOS: false,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
       } as any);
 
       const { sound: newSound } = await Audio.Sound.createAsync(
