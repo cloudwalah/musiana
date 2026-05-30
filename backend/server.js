@@ -21,8 +21,27 @@ app.use('/api/search', searchRoutes);
 app.get('/api/debug', async (req, res) => {
     const { exec } = require('child_process');
     const util = require('util');
+    const path = require('path');
     const execPromise = util.promisify(exec);
     
+    // 1. Inject paths to match downloader.js
+    const localBin = path.join(__dirname, 'bin');
+    if (process.env.PATH && !process.env.PATH.includes(localBin)) {
+        process.env.PATH = `${localBin}:${process.env.PATH}`;
+    }
+    
+    try {
+        const ffmpegStatic = require('ffmpeg-static');
+        if (ffmpegStatic) {
+            const ffmpegDir = path.dirname(ffmpegStatic);
+            if (process.env.PATH && !process.env.PATH.includes(ffmpegDir)) {
+                process.env.PATH = `${ffmpegDir}:${process.env.PATH}`;
+            }
+        }
+    } catch (ffmpegErr) {
+        console.warn('⚠️ Could not load ffmpeg-static in debug:', ffmpegErr.message);
+    }
+
     const debugInfo = {
         platform: process.platform,
         nodeVersion: process.version,
@@ -50,10 +69,11 @@ app.get('/api/debug', async (req, res) => {
 
     if (!debugInfo.ytDlpPath) {
         const findPaths = [
+            path.join(localBin, 'yt-dlp'),
             '/home/render/.local/bin/yt-dlp',
             '/opt/render/.local/bin/yt-dlp',
             '/root/.local/bin/yt-dlp',
-            '/opt/render/project/src/.local/bin/yt-dlp',
+            '/opt/render/project/src/backend/bin/yt-dlp',
             '~/.local/bin/yt-dlp'
         ];
         for (const p of findPaths) {

@@ -1,11 +1,31 @@
 const { exec, spawn } = require('child_process');
 
-// On macOS (local dev): ensure Homebrew binaries are in PATH for yt-dlp and ffmpeg
+const path = require('path');
+
+// 1. Add local bin directory (for standalone yt-dlp download) to PATH
+const localBin = path.join(__dirname, '../bin');
+if (process.env.PATH && !process.env.PATH.includes(localBin)) {
+  process.env.PATH = `${localBin}:${process.env.PATH}`;
+}
+
+// 2. Add ffmpeg-static path to environment PATH so yt-dlp/node can locate ffmpeg
+try {
+  const ffmpeg = require('ffmpeg-static');
+  if (ffmpeg) {
+    const ffmpegDir = path.dirname(ffmpeg);
+    if (process.env.PATH && !process.env.PATH.includes(ffmpegDir)) {
+      process.env.PATH = `${ffmpegDir}:${process.env.PATH}`;
+    }
+  }
+} catch (ffmpegErr) {
+  console.warn('⚠️ Could not load ffmpeg-static:', ffmpegErr.message);
+}
+
+// 3. On macOS (local dev): ensure Homebrew binaries are in PATH
 if (process.platform === 'darwin' && process.env.PATH && !process.env.PATH.includes('/opt/homebrew/bin')) {
   process.env.PATH = `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}`;
 }
 const util = require('util');
-const path = require('path');
 const fs = require('fs');
 const cloudinary = require('../config/cloudinary');
 const Music = require('../models/Music');
