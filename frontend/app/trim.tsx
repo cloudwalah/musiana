@@ -62,7 +62,6 @@ export default function TrimScreen() {
   // Store absolute drag grant values
   const startValOnGrant = useRef(0);
   const endValOnGrant = useRef(0);
-  const activePointer = useRef<'A' | 'B' | null>(null);
 
   useEffect(() => {
     trimStartRef.current = trimStart;
@@ -193,51 +192,38 @@ export default function TrimScreen() {
     return isNaN(val) || val <= 0 ? 0.1 : val;
   };
 
-  // Gesture handler for custom unified dual-pointer timeline slider
-  const panResponder = useRef(
+  // Draggable PanResponder for Pointer A (Start handle)
+  const panResponderA = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt, gestureState) => {
+      onPanResponderGrant: () => {
         stopPlayback();
-
-        const touchX = evt.nativeEvent.locationX;
-        if (!sliderWidth) return;
-        
-        const pct = Math.max(0, Math.min(touchX / sliderWidth, 1));
-        const touchTime = pct * totalDuration;
-
-        // Choose which pointer to drag based on proximity
-        const distA = Math.abs(touchTime - trimStartRef.current);
-        const distB = Math.abs(touchTime - trimEndRef.current);
-
-        if (distA < distB) {
-          activePointer.current = 'A';
-          setTrimStart(Math.min(touchTime, trimEndRef.current));
-        } else {
-          activePointer.current = 'B';
-          setTrimEnd(Math.max(touchTime, trimStartRef.current));
-        }
-
         startValOnGrant.current = trimStartRef.current;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (!sliderWidth) return;
+        const timeDelta = (gestureState.dx / sliderWidth) * totalDuration;
+        const targetVal = Math.max(0, Math.min(startValOnGrant.current + timeDelta, trimEndRef.current));
+        setTrimStart(Math.round(targetVal * 100) / 100);
+      }
+    })
+  ).current;
+
+  // Draggable PanResponder for Pointer B (End handle)
+  const panResponderB = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        stopPlayback();
         endValOnGrant.current = trimEndRef.current;
       },
       onPanResponderMove: (evt, gestureState) => {
         if (!sliderWidth) return;
-
-        // gestureState.dx measures horizontal gesture distance
         const timeDelta = (gestureState.dx / sliderWidth) * totalDuration;
-
-        if (activePointer.current === 'A') {
-          const targetVal = Math.max(0, Math.min(startValOnGrant.current + timeDelta, trimEndRef.current));
-          setTrimStart(Math.round(targetVal * 100) / 100);
-        } else if (activePointer.current === 'B') {
-          const targetVal = Math.max(trimStartRef.current, Math.min(endValOnGrant.current + timeDelta, totalDuration));
-          setTrimEnd(Math.round(targetVal * 100) / 100);
-        }
-      },
-      onPanResponderRelease: () => {
-        activePointer.current = null;
+        const targetVal = Math.max(trimStartRef.current, Math.min(endValOnGrant.current + timeDelta, totalDuration));
+        setTrimEnd(Math.round(targetVal * 100) / 100);
       }
     })
   ).current;
@@ -350,7 +336,6 @@ export default function TrimScreen() {
             <View 
               style={styles.trackContainer}
               onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
-              {...panResponder.panHandlers}
             >
               <View style={styles.timelineTrack} pointerEvents="none">
                 {/* Highlight selected range */}
@@ -370,33 +355,37 @@ export default function TrimScreen() {
                 />
               </View>
 
-              {/* Pointer Handle A */}
+              {/* Pointer Handle A (Draggable) */}
               <View 
                 style={[
                   styles.pointerHandle, 
                   styles.pointerHandleA,
                   { left: `${selectionStartPct}%` }
                 ]}
-                pointerEvents="none"
+                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                {...panResponderA.panHandlers}
               >
                 <Text style={styles.pointerLabelText}>A</Text>
               </View>
 
-              {/* Pointer Handle B */}
+              {/* Pointer Handle B (Draggable) */}
               <View 
                 style={[
                   styles.pointerHandle, 
                   styles.pointerHandleB,
                   { left: `${selectionEndPct}%` }
                 ]}
-                pointerEvents="none"
+                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                {...panResponderB.panHandlers}
               >
                 <Text style={styles.pointerLabelText}>B</Text>
               </View>
             </View>
 
             <View style={styles.timelineLabels}>
-              <Text style={styles.timelineLimitLabel}>0:00.00</Text>
+              {/* Top-left dynamically updating playback elapsed time indicator */}
+              <Text style={styles.timelineLimitLabel}>{formatTime(playbackPos / 1000)}</Text>
+              {/* Top-right song total duration limit */}
               <Text style={styles.timelineLimitLabel}>{formatTime(totalDuration)}</Text>
             </View>
           </View>
