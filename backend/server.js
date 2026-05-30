@@ -47,6 +47,7 @@ app.get('/api/debug', async (req, res) => {
     const potentialCookiesPaths = [
         path.join(__dirname, 'cookies.txt'),          // backend/cookies.txt
         path.join(__dirname, '../cookies.txt'),       // repository root/cookies.txt
+        '/etc/secrets/cookies.txt',                      // Render default secret file path
         '/opt/render/project/src/cookies.txt',        // absolute path on Render repo root
         '/opt/render/project/src/backend/cookies.txt' // absolute path on Render backend
     ];
@@ -122,7 +123,7 @@ app.get('/api/debug', async (req, res) => {
     }
 
     try {
-        const { stdout } = await execPromise('find /opt/render/project/src -name "*cookies*"');
+        const { stdout } = await execPromise('find /opt/render/project/src /etc/secrets -name "*cookies*" 2>/dev/null || find /opt/render/project/src -name "*cookies*"');
         debugInfo.foundCookiesFiles = stdout.trim().split('\n').filter(Boolean);
     } catch (e) {
         debugInfo.errors.push(`find cookies failed: ${e.message}`);

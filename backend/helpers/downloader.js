@@ -37,6 +37,7 @@ let cookiesPath = null;
 const potentialCookiesPaths = [
   path.join(__dirname, '../cookies.txt'),          // backend/cookies.txt
   path.join(__dirname, '../../cookies.txt'),       // repository root/cookies.txt
+  '/etc/secrets/cookies.txt',                      // Render default secret file path
   '/opt/render/project/src/cookies.txt',           // absolute path on Render repo root
   '/opt/render/project/src/backend/cookies.txt'    // absolute path on Render backend
 ];
