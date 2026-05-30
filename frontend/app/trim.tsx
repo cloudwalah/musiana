@@ -10,7 +10,8 @@ import {
   Platform, 
   ActivityIndicator, 
   Alert,
-  PanResponder
+  PanResponder,
+  TextInput
 } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +23,7 @@ const { width } = Dimensions.get('window');
 const COVER_SIZE = width * 0.35;
 
 export default function TrimScreen() {
-  const { currentlyPlaying, play } = useAudio();
+  const { currentlyPlaying, play, pause: contextPause } = useAudio();
 
   // Parsing initial duration
   const parseDuration = (dStr: string) => {
@@ -40,6 +41,9 @@ export default function TrimScreen() {
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(initialDuration);
   
+  // Custom increment step configuration
+  const [customStepStr, setCustomStepStr] = useState('0.1');
+
   // Local playback engine states
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -78,6 +82,9 @@ export default function TrimScreen() {
       try {
         setIsLoading(true);
         console.log('🔄 TrimScreen: Loading audio locally for range verification:', currentlyPlaying.url);
+
+        // Pause context playback on entry
+        await contextPause();
 
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: currentlyPlaying.url },
@@ -179,6 +186,11 @@ export default function TrimScreen() {
   const adjustEnd = (delta: number) => {
     const newVal = Math.max(trimStart, Math.min(trimEnd + delta, totalDuration));
     setTrimEnd(Math.round(newVal * 100) / 100);
+  };
+
+  const getCustomStep = () => {
+    const val = parseFloat(customStepStr);
+    return isNaN(val) || val <= 0 ? 0.1 : val;
   };
 
   // Gesture handler for custom unified dual-pointer timeline slider
@@ -294,6 +306,8 @@ export default function TrimScreen() {
   const selectionWidthPct = selectionEndPct - selectionStartPct;
   const cursorLeftPct = totalDuration > 0 ? (playbackPos / (totalDuration * 1000)) * 100 : 0;
 
+  const currentStep = getCustomStep();
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Hide Expo Router's native header */}
@@ -338,7 +352,7 @@ export default function TrimScreen() {
               onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
               {...panResponder.panHandlers}
             >
-              <View style={styles.timelineTrack}>
+              <View style={styles.timelineTrack} pointerEvents="none">
                 {/* Highlight selected range */}
                 <View 
                   style={[
@@ -363,6 +377,7 @@ export default function TrimScreen() {
                   styles.pointerHandleA,
                   { left: `${selectionStartPct}%` }
                 ]}
+                pointerEvents="none"
               >
                 <Text style={styles.pointerLabelText}>A</Text>
               </View>
@@ -374,6 +389,7 @@ export default function TrimScreen() {
                   styles.pointerHandleB,
                   { left: `${selectionEndPct}%` }
                 ]}
+                pointerEvents="none"
               >
                 <Text style={styles.pointerLabelText}>B</Text>
               </View>
@@ -388,6 +404,22 @@ export default function TrimScreen() {
           {/* Adjustments Container */}
           <View style={styles.adjustmentsContainer}>
             
+            {/* Custom Step Configuration */}
+            <View style={styles.customStepConfigCard}>
+              <Text style={styles.customStepConfigLabel}>Custom Nudge Step:</Text>
+              <View style={styles.customStepInputWrapper}>
+                <TextInput
+                  style={styles.customStepInput}
+                  keyboardType="numeric"
+                  placeholder="0.10"
+                  placeholderTextColor="#7C7899"
+                  value={customStepStr}
+                  onChangeText={setCustomStepStr}
+                />
+                <Text style={styles.customStepUnit}>seconds</Text>
+              </View>
+            </View>
+
             {/* START TRIM (Point A) */}
             <View style={styles.adjustSection}>
               <View style={styles.adjustLabelRow}>
@@ -395,17 +427,25 @@ export default function TrimScreen() {
                 <Text style={styles.adjustValue}>{formatTime(trimStart)}</Text>
               </View>
               <View style={styles.fineTuneRow}>
+                <TouchableOpacity style={styles.fineBtn} onPress={() => adjustStart(-1.0)}>
+                  <Text style={styles.fineBtnText}>-1s</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.fineBtn} onPress={() => adjustStart(-0.5)}>
                   <Text style={styles.fineBtnText}>-0.5s</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.fineBtn} onPress={() => adjustStart(-0.01)}>
-                  <Text style={styles.fineBtnText}>-0.01s</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.fineBtn} onPress={() => adjustStart(0.01)}>
-                  <Text style={styles.fineBtnText}>+0.01s</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={styles.fineBtn} onPress={() => adjustStart(0.5)}>
                   <Text style={styles.fineBtnText}>+0.5s</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.fineBtn} onPress={() => adjustStart(1.0)}>
+                  <Text style={styles.fineBtnText}>+1s</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.customNudgeRow}>
+                <TouchableOpacity style={styles.customNudgeBtn} onPress={() => adjustStart(-currentStep)}>
+                  <Text style={styles.customNudgeBtnText}>- {currentStep}s</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.customNudgeBtn} onPress={() => adjustStart(currentStep)}>
+                  <Text style={styles.customNudgeBtnText}>+ {currentStep}s</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -417,17 +457,25 @@ export default function TrimScreen() {
                 <Text style={styles.adjustValue}>{formatTime(trimEnd)}</Text>
               </View>
               <View style={styles.fineTuneRow}>
+                <TouchableOpacity style={styles.fineBtn} onPress={() => adjustEnd(-1.0)}>
+                  <Text style={styles.fineBtnText}>-1s</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.fineBtn} onPress={() => adjustEnd(-0.5)}>
                   <Text style={styles.fineBtnText}>-0.5s</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.fineBtn} onPress={() => adjustEnd(-0.01)}>
-                  <Text style={styles.fineBtnText}>-0.01s</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.fineBtn} onPress={() => adjustEnd(0.01)}>
-                  <Text style={styles.fineBtnText}>+0.01s</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={styles.fineBtn} onPress={() => adjustEnd(0.5)}>
                   <Text style={styles.fineBtnText}>+0.5s</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.fineBtn} onPress={() => adjustEnd(1.0)}>
+                  <Text style={styles.fineBtnText}>+1s</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.customNudgeRow}>
+                <TouchableOpacity style={styles.customNudgeBtn} onPress={() => adjustEnd(-currentStep)}>
+                  <Text style={styles.customNudgeBtnText}>- {currentStep}s</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.customNudgeBtn} onPress={() => adjustEnd(currentStep)}>
+                  <Text style={styles.customNudgeBtnText}>+ {currentStep}s</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -686,6 +734,44 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  customStepConfigCard: {
+    backgroundColor: '#1C1330',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#332354',
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  customStepConfigLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7C7899',
+  },
+  customStepInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  customStepInput: {
+    backgroundColor: '#130D22',
+    borderWidth: 1,
+    borderColor: '#332354',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+    width: 60,
+    textAlign: 'center',
+  },
+  customStepUnit: {
+    color: '#7C7899',
+    fontSize: 12,
+    marginLeft: 6,
+  },
   adjustSection: {
     marginBottom: 16,
   },
@@ -722,6 +808,25 @@ const styles = StyleSheet.create({
   },
   fineBtnText: {
     color: '#BDB4FF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  customNudgeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  customNudgeBtn: {
+    backgroundColor: '#251842',
+    borderWidth: 1,
+    borderColor: '#332354',
+    borderRadius: 6,
+    paddingVertical: 8,
+    flex: 0.48,
+    alignItems: 'center',
+  },
+  customNudgeBtnText: {
+    color: '#8B5CF6',
     fontSize: 12,
     fontWeight: '600',
   },
