@@ -78,7 +78,9 @@ export default function HomeScreen() {
     duration,
     setMusicList: setContextMusicList,
     addToQueue,
-    clearQueue
+    clearQueue,
+    isShuffle,
+    toggleShuffle
   } = useAudio();
 
   // Re-fetch the music list every time this screen comes into focus.
@@ -377,9 +379,13 @@ export default function HomeScreen() {
     
     clearQueue();
     setContextMusicList(playlist.songs);
-    await play(playlist.songs[0]);
-    router.push('/player');
-    setSelectedPlaylist(null);
+    
+    if (isShuffle) {
+      const randomIndex = Math.floor(Math.random() * playlist.songs.length);
+      await play(playlist.songs[randomIndex]);
+    } else {
+      await play(playlist.songs[0]);
+    }
   };
 
   const handleConfirmRemoveSong = async () => {
@@ -537,16 +543,7 @@ export default function HomeScreen() {
           <Text style={styles.headerTitleLeft} numberOfLines={1}>
             {selectedPlaylist.name}
           </Text>
-          {selectedPlaylist.songs && selectedPlaylist.songs.length > 0 ? (
-            <TouchableOpacity
-              style={styles.headerPlayPlaylistBtn}
-              onPress={() => handlePlayPlaylist(selectedPlaylist)}
-            >
-              <Ionicons name="play" size={20} color="#FFFFFF" style={{ marginLeft: 2 }} />
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 36 }} />
-          )}
+          <View style={{ width: 10 }} />
         </View>
 
         <FlatList
@@ -559,17 +556,37 @@ export default function HomeScreen() {
           style={{ width: '100%', flex: 1 }}
           ListHeaderComponent={
             <View style={styles.detailsHeaderSection}>
-              <Text style={styles.detailsMeta}>
-                {selectedPlaylist.isDefault ? 'Default Playlist' : (selectedPlaylist.isPrivate ? 'Private' : 'Public')}
-              </Text>
+              <View style={styles.detailsHeaderLeft}>
+                <Text style={styles.detailsMeta}>
+                  {selectedPlaylist.isDefault ? 'Default Playlist' : (selectedPlaylist.isPrivate ? 'Private' : 'Public')}
+                </Text>
+                
+                {selectedPlaylist.tags && selectedPlaylist.tags.length > 0 && (
+                  <View style={styles.detailsTagsContainer}>
+                    {selectedPlaylist.tags.map((tag: string, index: number) => (
+                      <View key={index} style={styles.detailsTagBadge}>
+                        <Text style={styles.detailsTagText}>#{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
               
-              {selectedPlaylist.tags && selectedPlaylist.tags.length > 0 && (
-                <View style={styles.detailsTagsContainer}>
-                  {selectedPlaylist.tags.map((tag: string, index: number) => (
-                    <View key={index} style={styles.detailsTagBadge}>
-                      <Text style={styles.detailsTagText}>#{tag}</Text>
-                    </View>
-                  ))}
+              {selectedPlaylist.songs && selectedPlaylist.songs.length > 0 && (
+                <View style={styles.detailsHeaderActions}>
+                  <TouchableOpacity
+                    style={[styles.playlistHeaderActionBtn, isShuffle && styles.playlistHeaderActionBtnActive]}
+                    onPress={toggleShuffle}
+                  >
+                    <Ionicons name="shuffle" size={20} color={isShuffle ? '#BDB4FF' : '#7C7899'} />
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.playlistHeaderActionBtnPlay}
+                    onPress={() => handlePlayPlaylist(selectedPlaylist)}
+                  >
+                    <Ionicons name="play" size={20} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -921,41 +938,56 @@ export default function HomeScreen() {
         )}
 
         {!item.isDefault && isDropdownActive && (
-          <View style={styles.playlistDropdownMenu}>
-            <TouchableOpacity 
-              style={styles.playlistDropdownOption}
-              onPress={() => {
-                setActiveDropdownPlaylistId(null);
-                setPlaylistToUpdate(item);
-                setShowVisibilityModal(true);
+          <>
+            <TouchableOpacity
+              style={{
+                position: 'absolute',
+                top: -Dimensions.get('window').height,
+                bottom: -Dimensions.get('window').height,
+                left: -Dimensions.get('window').width,
+                right: -Dimensions.get('window').width,
+                backgroundColor: 'transparent',
+                zIndex: 990,
               }}
-            >
-              <Ionicons 
-                name={item.isPrivate ? "globe-outline" : "lock-closed-outline"} 
-                size={16} 
-                color="#BDB4FF" 
-              />
-              <Text style={styles.playlistDropdownOptionText}>
-                {item.isPrivate ? 'Make Public' : 'Make Private'}
-              </Text>
-            </TouchableOpacity>
-            
-            <View style={styles.playlistDropdownDivider} />
-            
-            <TouchableOpacity 
-              style={styles.playlistDropdownOption}
-              onPress={() => {
-                setActiveDropdownPlaylistId(null);
-                setPlaylistToDelete(item);
-                setShowDeletePlaylistModal(true);
-              }}
-            >
-              <Ionicons name="trash-outline" size={16} color="#FF3B30" />
-              <Text style={[styles.playlistDropdownOptionText, { color: '#FF3B30' }]}>
-                Delete
-              </Text>
-            </TouchableOpacity>
-          </View>
+              activeOpacity={1}
+              onPress={() => setActiveDropdownPlaylistId(null)}
+            />
+            <View style={styles.playlistDropdownMenu}>
+              <TouchableOpacity 
+                style={styles.playlistDropdownOption}
+                onPress={() => {
+                  setActiveDropdownPlaylistId(null);
+                  setPlaylistToUpdate(item);
+                  setShowVisibilityModal(true);
+                }}
+              >
+                <Ionicons 
+                  name={item.isPrivate ? "globe-outline" : "lock-closed-outline"} 
+                  size={16} 
+                  color="#BDB4FF" 
+                />
+                <Text style={styles.playlistDropdownOptionText}>
+                  {item.isPrivate ? 'Make Public' : 'Make Private'}
+                </Text>
+              </TouchableOpacity>
+              
+              <View style={styles.playlistDropdownDivider} />
+              
+              <TouchableOpacity 
+                style={styles.playlistDropdownOption}
+                onPress={() => {
+                  setActiveDropdownPlaylistId(null);
+                  setPlaylistToDelete(item);
+                  setShowDeletePlaylistModal(true);
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+                <Text style={[styles.playlistDropdownOptionText, { color: '#FF3B30' }]}>
+                  Delete
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </View>
     );
@@ -1153,13 +1185,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {activeDropdownPlaylistId !== null && (
-        <TouchableOpacity
-          style={[StyleSheet.absoluteFill, { zIndex: 990, backgroundColor: 'transparent' }]}
-          activeOpacity={1}
-          onPress={() => setActiveDropdownPlaylistId(null)}
-        />
-      )}
 
       {/* Custom Themed Confirmation Modals */}
       <Modal
@@ -2415,6 +2440,45 @@ const styles = StyleSheet.create({
     padding: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#251842',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  detailsHeaderLeft: {
+    flex: 1,
+    paddingRight: 15,
+  },
+  detailsHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  playlistHeaderActionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#251842',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  playlistHeaderActionBtnActive: {
+    borderColor: '#8B5CF6',
+    backgroundColor: '#332354',
+  },
+  playlistHeaderActionBtnPlay: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 4,
   },
   headerPlaylistDetails: {
     backgroundColor: '#1C1330',
