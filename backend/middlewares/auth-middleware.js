@@ -14,9 +14,10 @@ const authMiddleware = async(req, res, next) => {
         req.userInfo = deCodedToken
         next();
     }catch(error){
-        res.status(500).json({
+        console.error('Auth middleware token verification failed:', error.message);
+        return res.status(401).json({
             success: false,
-            message: 'Internal Server Error'
+            message: 'Access denied. Token is invalid or expired.'
         })
     }
 }
