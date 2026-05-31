@@ -290,9 +290,10 @@ const checkSongLiked = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to check if song is liked',
-      error: error.message
     });
   }
+};
+
 // PATCH /api/playlists/:id
 const updatePlaylist = async (req, res) => {
   const userId = req.userInfo.userId;
