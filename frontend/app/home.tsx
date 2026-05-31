@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,7 +48,6 @@ export default function HomeScreen() {
   const [createPlaylistTags, setCreatePlaylistTags] = useState('');
   const [createPlaylistIsPrivate, setCreatePlaylistIsPrivate] = useState(true);
   const [selectedPlaylist, setSelectedPlaylist] = useState<any>(null);
-  const [showPlaylistDetailsModal, setShowPlaylistDetailsModal] = useState(false);
 
   // Search type selector: songs vs playlists vs both
   const [searchType, setSearchType] = useState<'songs' | 'playlists' | 'both'>('songs');
@@ -351,7 +350,7 @@ export default function HomeScreen() {
     setContextMusicList(playlist.songs);
     await play(playlist.songs[0]);
     router.push('/player');
-    setShowPlaylistDetailsModal(false);
+    setSelectedPlaylist(null);
   };
 
   const handleRemoveSongFromPlaylist = async (songId: string) => {
@@ -383,7 +382,6 @@ export default function HomeScreen() {
             try {
               const res = await api.deletePlaylist(selectedPlaylist._id);
               if (res.success) {
-                setShowPlaylistDetailsModal(false);
                 setSelectedPlaylist(null);
                 await fetchUserPlaylists();
               } else {
@@ -401,7 +399,6 @@ export default function HomeScreen() {
 
   const handleOpenPlaylistDetails = (playlist: any) => {
     setSelectedPlaylist(playlist);
-    setShowPlaylistDetailsModal(true);
   };
 
   // When clicking the row, load/play the song and open the full modal player
@@ -481,6 +478,145 @@ export default function HomeScreen() {
           </View>
         </View>
       </TouchableOpacity>
+    );
+  };
+
+  // --- SUB TAB RENDERS ---
+
+  const renderPlaylistDetails = () => {
+    if (!selectedPlaylist) return null;
+    return (
+      <View style={styles.tabContentContainer}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setSelectedPlaylist(null)} style={styles.createPlaylistHeaderBtn}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {selectedPlaylist.name}
+          </Text>
+          <View style={{ width: 24 }} /> {/* placeholder to balance back button */}
+        </View>
+
+        <FlatList
+          data={selectedPlaylist.songs || []}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={[
+            styles.listContainer,
+            currentlyPlaying ? { paddingBottom: 160 } : { paddingBottom: 80 }
+          ]}
+          style={{ width: '100%', flex: 1 }}
+          ListHeaderComponent={
+            <View style={styles.detailsHeaderSection}>
+              <Text style={styles.detailsMeta}>
+                {selectedPlaylist.isDefault ? 'Default Playlist' : (selectedPlaylist.isPrivate ? 'Private' : 'Public')} • {selectedPlaylist.songs?.length || 0} {selectedPlaylist.songs?.length === 1 ? 'song' : 'songs'}
+              </Text>
+              
+              {selectedPlaylist.tags && selectedPlaylist.tags.length > 0 && (
+                <View style={styles.detailsTagsContainer}>
+                  {selectedPlaylist.tags.map((tag: string, index: number) => (
+                    <View key={index} style={styles.detailsTagBadge}>
+                      <Text style={styles.detailsTagText}>#{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Play and Delete Buttons Row */}
+              <View style={styles.detailsActionsRow}>
+                {selectedPlaylist.songs && selectedPlaylist.songs.length > 0 ? (
+                  <TouchableOpacity
+                    style={styles.detailsPlayIconBtn}
+                    onPress={() => handlePlayPlaylist(selectedPlaylist)}
+                  >
+                    <Ionicons name="play" size={28} color="#FFFFFF" style={{ marginLeft: 3 }} />
+                  </TouchableOpacity>
+                ) : null}
+
+                {!selectedPlaylist.isDefault && (
+                  <TouchableOpacity
+                    style={styles.detailsDeletePlaylistBtn}
+                    onPress={handleDeletePlaylist}
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#FF3B30" style={{ marginRight: 6 }} />
+                    <Text style={styles.detailsDeletePlaylistBtnText}>Delete Playlist</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          }
+          renderItem={({ item }) => {
+            const isPlayingCurrent = currentlyPlaying?._id === item._id && isPlaying;
+            return (
+              <View style={styles.detailsSongItem}>
+                <TouchableOpacity
+                  style={styles.detailsSongClickable}
+                  onPress={async () => {
+                    if (currentlyPlaying?._id !== item._id) {
+                      await play(item);
+                    } else if (!isPlaying) {
+                      await resume();
+                    }
+                    router.push('/player');
+                  }}
+                >
+                  <View style={styles.detailsSongArt}>
+                    {item.imageUrl ? (
+                      <Image source={{ uri: item.imageUrl }} style={styles.detailsSongCover} />
+                    ) : (
+                      <Ionicons name="musical-note" size={18} color="#BDB4FF" />
+                    )}
+                  </View>
+                  <View style={styles.detailsSongInfo}>
+                    <Text style={[styles.detailsSongTitle, isPlayingCurrent && { color: '#8B5CF6' }]} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.detailsSongSub}>⏱ {item.duration}</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Option button (ellipsis-vertical) */}
+                <TouchableOpacity
+                  style={styles.detailsSongOptionsBtn}
+                  onPress={() => {
+                    Alert.alert(
+                      'Song Options',
+                      `Manage "${item.title}" in this playlist`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Remove from Playlist',
+                          style: 'destructive',
+                          onPress: async () => {
+                            if (selectedPlaylist.isDefault) {
+                              try {
+                                await api.toggleLikeSong(item._id);
+                                await fetchUserPlaylists();
+                              } catch (err) {
+                                console.log('Error unliking song:', err);
+                              }
+                            } else {
+                              await handleRemoveSongFromPlaylist(item._id);
+                            }
+                          }
+                        }
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="ellipsis-vertical" size={20} color="#7C7899" />
+                </TouchableOpacity>
+              </View>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.detailsEmptyContainer}>
+              <Text style={styles.detailsEmptyText}>No songs in this playlist</Text>
+              <Text style={styles.detailsEmptySub}>Add songs from the search or player menu</Text>
+            </View>
+          }
+        />
+      </View>
     );
   };
 
@@ -954,8 +1090,12 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* Tab Switcher Body */}
-      {activeTab === 'songs' && renderSongsTab()}
-      {activeTab === 'playlists' && renderPlaylistsTab()}
+      {activeTab === 'songs' && (
+        selectedPlaylist ? renderPlaylistDetails() : renderSongsTab()
+      )}
+      {activeTab === 'playlists' && (
+        selectedPlaylist ? renderPlaylistDetails() : renderPlaylistsTab()
+      )}
       {activeTab === 'profile' && renderProfileTab()}
 
       {/* Floating Mini Player Bar (Above bottom tab bar) */}
@@ -1161,150 +1301,7 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* Playlist Details Modal */}
-      <Modal
-        visible={showPlaylistDetailsModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowPlaylistDetailsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.detailsModalContainer}>
-            {selectedPlaylist && (
-              <>
-                {/* Header */}
-                <View style={styles.detailsHeader}>
-                  <View style={styles.detailsTitleContainer}>
-                    <Text style={styles.detailsName} numberOfLines={1}>{selectedPlaylist.name}</Text>
-                    <Text style={styles.detailsMeta}>
-                      {selectedPlaylist.isDefault ? 'Default' : (selectedPlaylist.isPrivate ? 'Private' : 'Public')} • {selectedPlaylist.songs?.length || 0} songs
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setShowPlaylistDetailsModal(false)}>
-                    <Ionicons name="close" size={24} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
 
-                {/* Tags if any */}
-                {selectedPlaylist.tags && selectedPlaylist.tags.length > 0 && (
-                  <View style={styles.detailsTagsContainer}>
-                    {selectedPlaylist.tags.map((tag: string, index: number) => (
-                      <View key={index} style={styles.detailsTagBadge}>
-                        <Text style={styles.detailsTagText}>#{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {/* Play and Delete Buttons Row */}
-                <View style={styles.detailsActionsRow}>
-                  {selectedPlaylist.songs && selectedPlaylist.songs.length > 0 ? (
-                    <TouchableOpacity
-                      style={styles.detailsPlayBtn}
-                      onPress={() => handlePlayPlaylist(selectedPlaylist)}
-                    >
-                      <Ionicons name="play" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
-                      <Text style={styles.detailsPlayBtnText}>Play All</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.detailsPlayBtnDisabled}>
-                      <Text style={styles.detailsPlayBtnTextDisabled}>No Songs</Text>
-                    </View>
-                  )}
-
-                  {!selectedPlaylist.isDefault && (
-                    <TouchableOpacity
-                      style={styles.detailsDeletePlaylistBtn}
-                      onPress={handleDeletePlaylist}
-                    >
-                      <Ionicons name="trash-outline" size={18} color="#FF3B30" style={{ marginRight: 6 }} />
-                      <Text style={styles.detailsDeletePlaylistBtnText}>Delete</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {/* Song list */}
-                <FlatList
-                  data={selectedPlaylist.songs || []}
-                  keyExtractor={(item) => item._id}
-                  contentContainerStyle={{ paddingBottom: 20 }}
-                  style={{ width: '100%', flex: 1 }}
-                  renderItem={({ item }) => {
-                    const isPlayingCurrent = currentlyPlaying?._id === item._id && isPlaying;
-                    return (
-                      <View style={styles.detailsSongItem}>
-                        <TouchableOpacity
-                          style={styles.detailsSongClickable}
-                          onPress={async () => {
-                            if (currentlyPlaying?._id !== item._id) {
-                              await play(item);
-                            } else if (!isPlaying) {
-                              await resume();
-                            }
-                            router.push('/player');
-                            setShowPlaylistDetailsModal(false);
-                          }}
-                        >
-                          <View style={styles.detailsSongArt}>
-                            {item.imageUrl ? (
-                              <Image source={{ uri: item.imageUrl }} style={styles.detailsSongCover} />
-                            ) : (
-                              <Ionicons name="musical-note" size={18} color="#BDB4FF" />
-                            )}
-                          </View>
-                          <View style={styles.detailsSongInfo}>
-                            <Text style={[styles.detailsSongTitle, isPlayingCurrent && { color: '#8B5CF6' }]} numberOfLines={1}>
-                              {item.title}
-                            </Text>
-                            <Text style={styles.detailsSongSub}>⏱ {item.duration}</Text>
-                          </View>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.detailsSongRemoveBtn}
-                          onPress={() => {
-                            if (selectedPlaylist.isDefault) {
-                              Alert.alert(
-                                'Remove Liked Song',
-                                `Unlike "${item.title}"?`,
-                                [
-                                  { text: 'Cancel', style: 'cancel' },
-                                  {
-                                    text: 'Remove',
-                                    style: 'destructive',
-                                    onPress: async () => {
-                                      try {
-                                        await api.toggleLikeSong(item._id);
-                                        await fetchUserPlaylists();
-                                      } catch (err) {
-                                        console.log('Error unliking song:', err);
-                                      }
-                                    }
-                                  }
-                                ]
-                              );
-                            } else {
-                              handleRemoveSongFromPlaylist(item._id);
-                            }
-                          }}
-                        >
-                          <Ionicons name="close-circle-outline" size={20} color="#FF3B30" />
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  }}
-                  ListEmptyComponent={
-                    <View style={styles.detailsEmptyContainer}>
-                      <Text style={styles.detailsEmptyText}>No songs in this playlist</Text>
-                      <Text style={styles.detailsEmptySub}>Add songs from the search or player menu</Text>
-                    </View>
-                  }
-                />
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -2152,5 +2149,27 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  detailsPlayIconBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  detailsSongOptionsBtn: {
+    padding: 10,
+  },
+  detailsHeaderSection: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#251842',
   },
 });

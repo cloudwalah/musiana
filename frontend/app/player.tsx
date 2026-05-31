@@ -248,7 +248,7 @@ export default function PlayerScreen() {
             <Ionicons 
               name={isLiked ? 'heart' : 'heart-outline'} 
               size={30} 
-              color={isLiked ? '#FF3B30' : '#BDB4FF'} 
+              color={isLiked ? '#8B5CF6' : '#BDB4FF'} 
             />
           </TouchableOpacity>
         </View>
@@ -310,6 +310,13 @@ export default function PlayerScreen() {
             <Ionicons name="list" size={24} color="#BDB4FF" />
           </TouchableOpacity>
 
+          <TouchableOpacity onPress={async () => {
+            await loadPlaylistsForSelection();
+            setShowPlaylistSelectModal(true);
+          }}>
+            <Ionicons name="add-circle-outline" size={26} color="#BDB4FF" />
+          </TouchableOpacity>
+          
           <TouchableOpacity onPress={toggleLoop}>
             <Ionicons 
               name="repeat" 
@@ -354,18 +361,6 @@ export default function PlayerScreen() {
             >
               <Ionicons name="download-outline" size={20} color="#34C759" style={{ marginRight: 10 }} />
               <Text style={styles.optionText}>Download full song</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.optionRow} 
-              onPress={() => {
-                setShowOptionsModal(false);
-                loadPlaylistsForSelection();
-                setShowPlaylistSelectModal(true);
-              }}
-            >
-              <Ionicons name="add-circle-outline" size={20} color="#8B5CF6" style={{ marginRight: 10 }} />
-              <Text style={styles.optionText}>Add to Playlist</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -716,7 +711,7 @@ const styles = StyleSheet.create({
   extraControls: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '45%',
+    width: '65%',
     marginTop: 10,
   },
   modalOverlay: {
