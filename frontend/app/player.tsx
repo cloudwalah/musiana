@@ -126,6 +126,12 @@ export default function PlayerScreen() {
   const [showPlaylistSelectModal, setShowPlaylistSelectModal] = useState(false);
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
 
+  // Create Playlist & Add states
+  const [showCreateAndAddModal, setShowCreateAndAddModal] = useState(false);
+  const [createAndAddName, setCreateAndAddName] = useState('');
+  const [createAndAddTags, setCreateAndAddTags] = useState('');
+  const [createAndAddIsPrivate, setCreateAndAddIsPrivate] = useState(true);
+
   // If we are not sliding, sync the sliding value with the actual position
   useEffect(() => {
     if (!isSliding) {
@@ -181,7 +187,16 @@ export default function PlayerScreen() {
       setIsLoadingPlaylists(true);
       const res = await api.fetchPlaylists();
       const customPlaylists = res.data.filter((p: any) => !p.isDefault);
-      setPlaylists(customPlaylists);
+      
+      // Filter out custom playlists that already contain the currently playing song
+      const filteredPlaylists = customPlaylists.filter((p: any) => {
+        return !p.songs?.some((s: any) => {
+          const songId = typeof s === 'string' ? s : s._id;
+          return songId === currentlyPlaying?._id;
+        });
+      });
+
+      setPlaylists(filteredPlaylists);
     } catch (err) {
       console.log('Error loading playlists:', err);
       Alert.alert('Error', 'Failed to load playlists');
@@ -556,6 +571,20 @@ export default function PlayerScreen() {
                 keyExtractor={(item) => item._id}
                 style={{ width: '100%', maxHeight: Dimensions.get('window').height * 0.4 }}
                 contentContainerStyle={{ paddingBottom: 15 }}
+                ListHeaderComponent={
+                  <TouchableOpacity
+                    style={styles.createAndAddHeaderBtn}
+                    onPress={() => {
+                      setCreateAndAddName('');
+                      setCreateAndAddTags('');
+                      setCreateAndAddIsPrivate(true);
+                      setShowCreateAndAddModal(true);
+                    }}
+                  >
+                    <Ionicons name="add-circle" size={20} color="#8B5CF6" style={{ marginRight: 8 }} />
+                    <Text style={styles.createAndAddHeaderBtnText}>Create Playlist & Add</Text>
+                  </TouchableOpacity>
+                }
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={styles.playlistSelectItem}
@@ -591,7 +620,7 @@ export default function PlayerScreen() {
                 ListEmptyComponent={
                   <View style={styles.emptyPlaylistsContainer}>
                     <Text style={styles.emptyPlaylistsText}>No custom playlists found.</Text>
-                    <Text style={styles.emptyPlaylistsSubtext}>Create one in the Library tab first.</Text>
+                    <Text style={styles.emptyPlaylistsSubtext}>Create one using the button above or in Library tab.</Text>
                   </View>
                 }
               />
@@ -603,6 +632,108 @@ export default function PlayerScreen() {
             >
               <Text style={styles.playlistSelectCancelBtnText}>Close</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create Playlist & Add Modal */}
+      <Modal
+        visible={showCreateAndAddModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCreateAndAddModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.playlistModalContainer}>
+            <Text style={styles.playlistModalTitle}>Create Playlist & Add</Text>
+            
+            <TextInput
+              style={styles.playlistModalInput}
+              placeholder="Playlist Name"
+              placeholderTextColor="#7C7899"
+              value={createAndAddName}
+              onChangeText={setCreateAndAddName}
+              autoCapitalize="words"
+            />
+            
+            <TextInput
+              style={styles.playlistModalInput}
+              placeholder="Tags (comma separated, e.g. gym, chill)"
+              placeholderTextColor="#7C7899"
+              value={createAndAddTags}
+              onChangeText={setCreateAndAddTags}
+              autoCapitalize="none"
+            />
+            
+            <View style={styles.privacyContainer}>
+              <Text style={styles.privacyLabel}>Privacy:</Text>
+              <View style={styles.privacyButtons}>
+                <TouchableOpacity
+                  style={[styles.privacyBtn, createAndAddIsPrivate && styles.privacyBtnActive]}
+                  onPress={() => setCreateAndAddIsPrivate(true)}
+                >
+                  <Ionicons name="lock-closed" size={16} color={createAndAddIsPrivate ? '#FFFFFF' : '#7C7899'} />
+                  <Text style={[styles.privacyBtnText, createAndAddIsPrivate && styles.privacyBtnTextActive]}>Private</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.privacyBtn, !createAndAddIsPrivate && styles.privacyBtnActive]}
+                  onPress={() => setCreateAndAddIsPrivate(false)}
+                >
+                  <Ionicons name="globe" size={16} color={!createAndAddIsPrivate ? '#FFFFFF' : '#7C7899'} />
+                  <Text style={[styles.privacyBtnText, !createAndAddIsPrivate && styles.privacyBtnTextActive]}>Public</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <View style={styles.playlistModalActions}>
+              <TouchableOpacity
+                style={styles.playlistCancelBtn}
+                onPress={() => setShowCreateAndAddModal(false)}
+              >
+                <Text style={styles.playlistCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.playlistCreateBtn}
+                onPress={async () => {
+                  if (!createAndAddName.trim()) {
+                    Alert.alert('Error', 'Playlist name is required');
+                    return;
+                  }
+                  try {
+                    const createRes = await api.createPlaylist(
+                      createAndAddName.trim(),
+                      createAndAddTags.trim(),
+                      createAndAddIsPrivate
+                    );
+                    
+                    if (createRes.success && createRes.data) {
+                      const newPlaylistId = createRes.data._id;
+                      const addRes = await api.addSongToPlaylist(newPlaylistId, currentlyPlaying._id);
+                      
+                      if (addRes.success) {
+                        Alert.alert('Success', `Playlist created and "${currentlyPlaying.title}" added!`);
+                        setShowCreateAndAddModal(false);
+                        setShowPlaylistSelectModal(false);
+                        setCreateAndAddName('');
+                        setCreateAndAddTags('');
+                        setCreateAndAddIsPrivate(true);
+                      } else {
+                        Alert.alert('Error', addRes.message || 'Failed to add song to the new playlist');
+                      }
+                    } else {
+                      Alert.alert('Error', createRes.message || 'Failed to create playlist');
+                    }
+                  } catch (err: any) {
+                    const errorMsg = err.response?.data?.message || 'Failed to create and add';
+                    Alert.alert('Error', errorMsg);
+                  }
+                }}
+              >
+                <Text style={styles.playlistCreateBtnText}>Create & Add</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1054,5 +1185,121 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 5,
     textAlign: 'center',
+  },
+  createAndAddHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#251842',
+    borderColor: '#332354',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginBottom: 15,
+    width: '100%',
+  },
+  createAndAddHeaderBtnText: {
+    color: '#8B5CF6',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  playlistModalContainer: {
+    width: '85%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#332354',
+    alignItems: 'center',
+  },
+  playlistModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  playlistModalInput: {
+    width: '100%',
+    backgroundColor: '#130D22',
+    color: '#FFFFFF',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  privacyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 20,
+    paddingHorizontal: 5,
+  },
+  privacyLabel: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  privacyButtons: {
+    flexDirection: 'row',
+  },
+  privacyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#130D22',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  privacyBtnActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  privacyBtnText: {
+    color: '#7C7899',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  privacyBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  playlistModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  playlistCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginRight: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  playlistCancelBtnText: {
+    color: '#7C7899',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  playlistCreateBtn: {
+    flex: 1,
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginLeft: 10,
+    borderRadius: 8,
+  },
+  playlistCreateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });

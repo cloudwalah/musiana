@@ -49,6 +49,19 @@ export default function HomeScreen() {
   const [createPlaylistIsPrivate, setCreatePlaylistIsPrivate] = useState(true);
   const [selectedPlaylist, setSelectedPlaylist] = useState<any>(null);
 
+  // Custom styled confirmation modal states
+  const [showRemoveSongModal, setShowRemoveSongModal] = useState(false);
+  const [songToRemove, setSongToRemove] = useState<any>(null);
+
+  const [showDeletePlaylistModal, setShowDeletePlaylistModal] = useState(false);
+  const [playlistToDelete, setPlaylistToDelete] = useState<any>(null);
+
+  const [showVisibilityModal, setShowVisibilityModal] = useState(false);
+  const [playlistToUpdate, setPlaylistToUpdate] = useState<any>(null);
+
+  // Dropdown options menu state
+  const [activeDropdownPlaylistId, setActiveDropdownPlaylistId] = useState<string | null>(null);
+
   // Search type selector: songs vs playlists vs both
   const [searchType, setSearchType] = useState<'songs' | 'playlists' | 'both'>('songs');
   const [searchResultsPlaylists, setSearchResultsPlaylists] = useState<any[]>([]);
@@ -369,48 +382,62 @@ export default function HomeScreen() {
     setSelectedPlaylist(null);
   };
 
-  const handleRemoveSongFromPlaylist = async (songId: string) => {
-    if (!selectedPlaylist) return;
+  const handleConfirmRemoveSong = async () => {
+    if (!selectedPlaylist || !songToRemove) return;
     try {
-      const res = await api.removeSongFromPlaylist(selectedPlaylist._id, songId);
-      if (res.success) {
-        await fetchUserPlaylists();
+      if (selectedPlaylist.isDefault) {
+        await api.toggleLikeSong(songToRemove._id);
       } else {
-        Alert.alert('Error', res.message || 'Failed to remove song');
+        await api.removeSongFromPlaylist(selectedPlaylist._id, songToRemove._id);
       }
+      setShowRemoveSongModal(false);
+      setSongToRemove(null);
+      await fetchUserPlaylists();
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || 'Failed to remove song';
       Alert.alert('Error', errorMsg);
     }
   };
 
-  const handleDeletePlaylist = async () => {
-    if (!selectedPlaylist) return;
-    Alert.alert(
-      'Delete Playlist',
-      `Are you sure you want to delete "${selectedPlaylist.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const res = await api.deletePlaylist(selectedPlaylist._id);
-              if (res.success) {
-                setSelectedPlaylist(null);
-                await fetchUserPlaylists(false);
-              } else {
-                Alert.alert('Error', res.message || 'Failed to delete playlist');
-              }
-            } catch (err: any) {
-              const errorMsg = err.response?.data?.message || 'Failed to delete playlist';
-              Alert.alert('Error', errorMsg);
-            }
-          }
+  const handleConfirmDeletePlaylist = async () => {
+    if (!playlistToDelete) return;
+    try {
+      const res = await api.deletePlaylist(playlistToDelete._id);
+      if (res.success) {
+        if (selectedPlaylist && selectedPlaylist._id === playlistToDelete._id) {
+          setSelectedPlaylist(null);
         }
-      ]
-    );
+        setShowDeletePlaylistModal(false);
+        setPlaylistToDelete(null);
+        await fetchUserPlaylists(false);
+      } else {
+        Alert.alert('Error', res.message || 'Failed to delete playlist');
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || 'Failed to delete playlist';
+      Alert.alert('Error', errorMsg);
+    }
+  };
+
+  const handleConfirmVisibilityChange = async () => {
+    if (!playlistToUpdate) return;
+    try {
+      const targetVisibility = !playlistToUpdate.isPrivate;
+      const res = await api.updatePlaylist(playlistToUpdate._id, { isPrivate: targetVisibility });
+      if (res.success) {
+        if (selectedPlaylist && selectedPlaylist._id === playlistToUpdate._id) {
+          setSelectedPlaylist({ ...selectedPlaylist, isPrivate: targetVisibility });
+        }
+        setShowVisibilityModal(false);
+        setPlaylistToUpdate(null);
+        await fetchUserPlaylists(false);
+      } else {
+        Alert.alert('Error', res.message || 'Failed to update visibility');
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || 'Failed to update visibility';
+      Alert.alert('Error', errorMsg);
+    }
   };
 
   const handleOpenPlaylistDetails = (playlist: any) => {
@@ -581,29 +608,8 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   style={styles.detailsSongOptionsBtn}
                   onPress={() => {
-                    Alert.alert(
-                      'Remove Song',
-                      `Are you sure you want to remove "${item.title}" from this playlist?`,
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Remove',
-                          style: 'destructive',
-                          onPress: async () => {
-                            if (selectedPlaylist.isDefault) {
-                              try {
-                                await api.toggleLikeSong(item._id);
-                                await fetchUserPlaylists();
-                              } catch (err) {
-                                console.log('Error unliking song:', err);
-                              }
-                            } else {
-                              await handleRemoveSongFromPlaylist(item._id);
-                            }
-                          }
-                        }
-                      ]
-                    );
+                    setSongToRemove(item);
+                    setShowRemoveSongModal(true);
                   }}
                 >
                   <Ionicons name="ellipsis-vertical" size={20} color="#7C7899" />
@@ -867,72 +873,16 @@ export default function HomeScreen() {
     );
   };
 
-  const handlePlaylistOptionsPress = (playlist: any) => {
-    if (playlist.isDefault) return;
-    
-    const visibilityLabel = playlist.isPrivate ? 'Make Public' : 'Make Private';
-    
-    Alert.alert(
-      'Playlist Options',
-      `Manage "${playlist.name}"`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: visibilityLabel,
-          onPress: async () => {
-            try {
-              const res = await api.updatePlaylist(playlist._id, { isPrivate: !playlist.isPrivate });
-              if (res.success) {
-                Alert.alert('Success', `Playlist is now ${playlist.isPrivate ? 'Public' : 'Private'}`);
-                await fetchUserPlaylists(false);
-              } else {
-                Alert.alert('Error', res.message || 'Failed to update visibility');
-              }
-            } catch (err: any) {
-              const errorMsg = err.response?.data?.message || 'Failed to update visibility';
-              Alert.alert('Error', errorMsg);
-            }
-          }
-        },
-        {
-          text: 'Delete Playlist',
-          style: 'destructive',
-          onPress: async () => {
-            Alert.alert(
-              'Delete Playlist',
-              `Are you sure you want to delete "${playlist.name}"?`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { 
-                  text: 'Delete', 
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      const res = await api.deletePlaylist(playlist._id);
-                      if (res.success) {
-                        await fetchUserPlaylists(false);
-                      } else {
-                        Alert.alert('Error', res.message || 'Failed to delete playlist');
-                      }
-                    } catch (err: any) {
-                      const errorMsg = err.response?.data?.message || 'Failed to delete playlist';
-                      Alert.alert('Error', errorMsg);
-                    }
-                  }
-                }
-              ]
-            );
-          }
-        }
-      ]
-    );
-  };
-
   const renderPlaylistItem = ({ item }: { item: any }) => {
     const songCount = item.songs?.length || 0;
+    const isDropdownActive = activeDropdownPlaylistId === item._id;
+
     return (
       <TouchableOpacity 
-        style={styles.playlistCardItem}
+        style={[
+          styles.playlistCardItem,
+          isDropdownActive && { zIndex: 1000, elevation: 10 }
+        ]}
         onPress={() => handleOpenPlaylistDetails(item)}
       >
         <View style={[styles.playlistCardIcon, item.isDefault && styles.playlistCardIconDefault]}>
@@ -955,15 +905,53 @@ export default function HomeScreen() {
             </Text>
           )}
         </View>
-        {item.isDefault ? (
-          <Ionicons name="chevron-forward-outline" size={18} color="#7C7899" />
-        ) : (
+        {item.isDefault ? null : (
           <TouchableOpacity 
             style={{ padding: 10 }}
-            onPress={() => handlePlaylistOptionsPress(item)}
+            onPress={() => {
+              setActiveDropdownPlaylistId(isDropdownActive ? null : item._id);
+            }}
           >
             <Ionicons name="ellipsis-vertical" size={20} color="#7C7899" />
           </TouchableOpacity>
+        )}
+
+        {!item.isDefault && isDropdownActive && (
+          <View style={styles.playlistDropdownMenu}>
+            <TouchableOpacity 
+              style={styles.playlistDropdownOption}
+              onPress={() => {
+                setActiveDropdownPlaylistId(null);
+                setPlaylistToUpdate(item);
+                setShowVisibilityModal(true);
+              }}
+            >
+              <Ionicons 
+                name={item.isPrivate ? "globe-outline" : "lock-closed-outline"} 
+                size={16} 
+                color="#BDB4FF" 
+              />
+              <Text style={styles.playlistDropdownOptionText}>
+                {item.isPrivate ? 'Make Public' : 'Make Private'}
+              </Text>
+            </TouchableOpacity>
+            
+            <View style={styles.playlistDropdownDivider} />
+            
+            <TouchableOpacity 
+              style={styles.playlistDropdownOption}
+              onPress={() => {
+                setActiveDropdownPlaylistId(null);
+                setPlaylistToDelete(item);
+                setShowDeletePlaylistModal(true);
+              }}
+            >
+              <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+              <Text style={[styles.playlistDropdownOptionText, { color: '#FF3B30' }]}>
+                Delete
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
       </TouchableOpacity>
     );
@@ -1161,6 +1149,147 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {activeDropdownPlaylistId !== null && (
+        <TouchableOpacity
+          style={[StyleSheet.absoluteFill, { zIndex: 990, backgroundColor: 'transparent' }]}
+          activeOpacity={1}
+          onPress={() => setActiveDropdownPlaylistId(null)}
+        />
+      )}
+
+      {/* Custom Themed Confirmation Modals */}
+      <Modal
+        visible={showRemoveSongModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowRemoveSongModal(false);
+          setSongToRemove(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalContainer}>
+            <Text style={styles.confirmModalTitle}>Remove Song</Text>
+            <Text style={styles.confirmModalSub}>
+              Are you sure you want to remove this song from the playlist?
+            </Text>
+            {songToRemove && (
+              <Text style={styles.confirmModalBoldText} numberOfLines={2}>
+                {songToRemove.title}
+              </Text>
+            )}
+            <View style={styles.confirmActionRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => {
+                  setShowRemoveSongModal(false);
+                  setSongToRemove(null);
+                }}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmSaveBtn}
+                onPress={handleConfirmRemoveSong}
+              >
+                <Text style={styles.confirmSaveText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showDeletePlaylistModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowDeletePlaylistModal(false);
+          setPlaylistToDelete(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalContainer}>
+            <Text style={styles.confirmModalTitle}>Delete Playlist</Text>
+            <Text style={styles.confirmModalSub}>
+              Are you sure you want to delete this playlist?
+            </Text>
+            {playlistToDelete && (
+              <Text style={styles.confirmModalBoldText} numberOfLines={2}>
+                {playlistToDelete.name}
+              </Text>
+            )}
+            <View style={styles.confirmActionRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => {
+                  setShowDeletePlaylistModal(false);
+                  setPlaylistToDelete(null);
+                }}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmSaveBtn}
+                onPress={handleConfirmDeletePlaylist}
+              >
+                <Text style={styles.confirmSaveText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showVisibilityModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowVisibilityModal(false);
+          setPlaylistToUpdate(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalContainer}>
+            <Text style={styles.confirmModalTitle}>Change Visibility</Text>
+            {playlistToUpdate && (
+              <Text style={styles.confirmModalSub}>
+                This will change the visibility for the playlist from{" "}
+                <Text style={{ fontWeight: 'bold' }}>
+                  {playlistToUpdate.isPrivate ? 'private' : 'public'}
+                </Text>{" "}
+                to{" "}
+                <Text style={{ fontWeight: 'bold' }}>
+                  {playlistToUpdate.isPrivate ? 'public' : 'private'}
+                </Text>.
+              </Text>
+            )}
+            {playlistToUpdate && (
+              <Text style={styles.confirmModalBoldText} numberOfLines={2}>
+                {playlistToUpdate.name}
+              </Text>
+            )}
+            <View style={styles.confirmActionRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => {
+                  setShowVisibilityModal(false);
+                  setPlaylistToUpdate(null);
+                }}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmSaveBtn, { backgroundColor: '#8B5CF6' }]}
+                onPress={handleConfirmVisibilityChange}
+              >
+                <Text style={styles.confirmSaveText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Tab Switcher Body */}
       {activeTab === 'songs' && (
         selectedPlaylist ? renderPlaylistDetails() : renderSongsTab()
@@ -2283,5 +2412,98 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginRight: 8,
     fontWeight: '500',
+  },
+  playlistDropdownMenu: {
+    position: 'absolute',
+    right: 12,
+    top: 50,
+    backgroundColor: '#251842',
+    borderColor: '#332354',
+    borderWidth: 1,
+    borderRadius: 8,
+    width: 160,
+    zIndex: 995,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  playlistDropdownOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+  },
+  playlistDropdownOptionText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  playlistDropdownDivider: {
+    height: 1,
+    backgroundColor: '#332354',
+  },
+  confirmModalContainer: {
+    width: '85%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#332354',
+    alignItems: 'center',
+  },
+  confirmModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  confirmModalSub: {
+    fontSize: 14,
+    color: '#BDB4FF',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  confirmModalBoldText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 10,
+  },
+  confirmActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  confirmCancelBtn: {
+    flex: 0.46,
+    backgroundColor: '#251842',
+    borderWidth: 1,
+    borderColor: '#332354',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmCancelText: {
+    color: '#7C7899',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  confirmSaveBtn: {
+    flex: 0.46,
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmSaveText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });
