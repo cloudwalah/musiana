@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, BackHandler, TouchableWithoutFeedback } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -878,33 +878,37 @@ export default function HomeScreen() {
     const isDropdownActive = activeDropdownPlaylistId === item._id;
 
     return (
-      <TouchableOpacity 
+      <View 
         style={[
           styles.playlistCardItem,
           isDropdownActive && { zIndex: 1000, elevation: 10 }
         ]}
-        onPress={() => handleOpenPlaylistDetails(item)}
       >
-        <View style={[styles.playlistCardIcon, item.isDefault && styles.playlistCardIconDefault]}>
-          <Ionicons 
-            name={item.isDefault ? "heart" : "musical-notes"} 
-            size={28} 
-            color={item.isDefault ? "#FF3B30" : "#BDB4FF"} 
-          />
-        </View>
-        <View style={styles.playlistCardInfo}>
-          <Text style={styles.playlistCardName} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text style={styles.playlistCardSub}>
-            {item.isDefault ? 'Default Playlist' : (item.isPrivate ? 'Private' : 'Public')} • {songCount} {songCount === 1 ? 'song' : 'songs'}
-          </Text>
-          {item.tags && item.tags.length > 0 && (
-            <Text style={styles.playlistCardTags} numberOfLines={1}>
-              {item.tags.map((t: string) => `#${t}`).join(' ')}
+        <TouchableOpacity 
+          style={styles.playlistCardClickableArea}
+          onPress={() => handleOpenPlaylistDetails(item)}
+        >
+          <View style={[styles.playlistCardIcon, item.isDefault && styles.playlistCardIconDefault]}>
+            <Ionicons 
+              name={item.isDefault ? "heart" : "musical-notes"} 
+              size={28} 
+              color={item.isDefault ? "#FF3B30" : "#BDB4FF"} 
+            />
+          </View>
+          <View style={styles.playlistCardInfo}>
+            <Text style={styles.playlistCardName} numberOfLines={1}>
+              {item.name}
             </Text>
-          )}
-        </View>
+            <Text style={styles.playlistCardSub}>
+              {item.isDefault ? 'Default Playlist' : (item.isPrivate ? 'Private' : 'Public')} • {songCount} {songCount === 1 ? 'song' : 'songs'}
+            </Text>
+            {item.tags && item.tags.length > 0 && (
+              <Text style={styles.playlistCardTags} numberOfLines={1}>
+                {item.tags.map((t: string) => `#${t}`).join(' ')}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
         {item.isDefault ? null : (
           <TouchableOpacity 
             style={{ padding: 10 }}
@@ -953,7 +957,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -1167,36 +1171,45 @@ export default function HomeScreen() {
           setSongToRemove(null);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmModalContainer}>
-            <Text style={styles.confirmModalTitle}>Remove Song</Text>
-            <Text style={styles.confirmModalSub}>
-              Are you sure you want to remove this song from the playlist?
-            </Text>
-            {songToRemove && (
-              <Text style={styles.confirmModalBoldText} numberOfLines={2}>
-                {songToRemove.title}
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setShowRemoveSongModal(false);
+            setSongToRemove(null);
+          }}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              <Text style={styles.confirmModalTitle}>Remove Song</Text>
+              <Text style={styles.confirmModalSub}>
+                Are you sure you want to remove this song from the playlist?
               </Text>
-            )}
-            <View style={styles.confirmActionRow}>
-              <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => {
-                  setShowRemoveSongModal(false);
-                  setSongToRemove(null);
-                }}
-              >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmSaveBtn}
-                onPress={handleConfirmRemoveSong}
-              >
-                <Text style={styles.confirmSaveText}>Remove</Text>
-              </TouchableOpacity>
+              {songToRemove && (
+                <Text style={styles.confirmModalBoldText} numberOfLines={2}>
+                  {songToRemove.title}
+                </Text>
+              )}
+              <View style={styles.confirmActionRow}>
+                <TouchableOpacity
+                  style={styles.confirmCancelBtn}
+                  onPress={() => {
+                    setShowRemoveSongModal(false);
+                    setSongToRemove(null);
+                  }}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.confirmSaveBtn}
+                  onPress={handleConfirmRemoveSong}
+                >
+                  <Text style={styles.confirmSaveText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
 
       <Modal
@@ -1208,36 +1221,45 @@ export default function HomeScreen() {
           setPlaylistToDelete(null);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmModalContainer}>
-            <Text style={styles.confirmModalTitle}>Delete Playlist</Text>
-            <Text style={styles.confirmModalSub}>
-              Are you sure you want to delete this playlist?
-            </Text>
-            {playlistToDelete && (
-              <Text style={styles.confirmModalBoldText} numberOfLines={2}>
-                {playlistToDelete.name}
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setShowDeletePlaylistModal(false);
+            setPlaylistToDelete(null);
+          }}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              <Text style={styles.confirmModalTitle}>Delete Playlist</Text>
+              <Text style={styles.confirmModalSub}>
+                Are you sure you want to delete this playlist?
               </Text>
-            )}
-            <View style={styles.confirmActionRow}>
-              <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => {
-                  setShowDeletePlaylistModal(false);
-                  setPlaylistToDelete(null);
-                }}
-              >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmSaveBtn}
-                onPress={handleConfirmDeletePlaylist}
-              >
-                <Text style={styles.confirmSaveText}>Delete</Text>
-              </TouchableOpacity>
+              {playlistToDelete && (
+                <Text style={styles.confirmModalBoldText} numberOfLines={2}>
+                  {playlistToDelete.name}
+                </Text>
+              )}
+              <View style={styles.confirmActionRow}>
+                <TouchableOpacity
+                  style={styles.confirmCancelBtn}
+                  onPress={() => {
+                    setShowDeletePlaylistModal(false);
+                    setPlaylistToDelete(null);
+                  }}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.confirmSaveBtn}
+                  onPress={handleConfirmDeletePlaylist}
+                >
+                  <Text style={styles.confirmSaveText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
 
       <Modal
@@ -1249,45 +1271,54 @@ export default function HomeScreen() {
           setPlaylistToUpdate(null);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmModalContainer}>
-            <Text style={styles.confirmModalTitle}>Change Visibility</Text>
-            {playlistToUpdate && (
-              <Text style={styles.confirmModalSub}>
-                This will change the visibility for the playlist from{" "}
-                <Text style={{ fontWeight: 'bold' }}>
-                  {playlistToUpdate.isPrivate ? 'private' : 'public'}
-                </Text>{" "}
-                to{" "}
-                <Text style={{ fontWeight: 'bold' }}>
-                  {playlistToUpdate.isPrivate ? 'public' : 'private'}
-                </Text>.
-              </Text>
-            )}
-            {playlistToUpdate && (
-              <Text style={styles.confirmModalBoldText} numberOfLines={2}>
-                {playlistToUpdate.name}
-              </Text>
-            )}
-            <View style={styles.confirmActionRow}>
-              <TouchableOpacity
-                style={styles.confirmCancelBtn}
-                onPress={() => {
-                  setShowVisibilityModal(false);
-                  setPlaylistToUpdate(null);
-                }}
-              >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.confirmSaveBtn, { backgroundColor: '#8B5CF6' }]}
-                onPress={handleConfirmVisibilityChange}
-              >
-                <Text style={styles.confirmSaveText}>Confirm</Text>
-              </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setShowVisibilityModal(false);
+            setPlaylistToUpdate(null);
+          }}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              <Text style={styles.confirmModalTitle}>Change Visibility</Text>
+              {playlistToUpdate && (
+                <Text style={styles.confirmModalSub}>
+                  This will change the visibility for the playlist from{" "}
+                  <Text style={{ fontWeight: 'bold' }}>
+                    {playlistToUpdate.isPrivate ? 'private' : 'public'}
+                  </Text>{" "}
+                  to{" "}
+                  <Text style={{ fontWeight: 'bold' }}>
+                    {playlistToUpdate.isPrivate ? 'public' : 'private'}
+                  </Text>.
+                </Text>
+              )}
+              {playlistToUpdate && (
+                <Text style={styles.confirmModalBoldText} numberOfLines={2}>
+                  {playlistToUpdate.name}
+                </Text>
+              )}
+              <View style={styles.confirmActionRow}>
+                <TouchableOpacity
+                  style={styles.confirmCancelBtn}
+                  onPress={() => {
+                    setShowVisibilityModal(false);
+                    setPlaylistToUpdate(null);
+                  }}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmSaveBtn, { backgroundColor: '#8B5CF6' }]}
+                  onPress={handleConfirmVisibilityChange}
+                >
+                  <Text style={styles.confirmSaveText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
 
       {/* Tab Switcher Body */}
@@ -1417,90 +1448,96 @@ export default function HomeScreen() {
         animationType="slide"
         onRequestClose={() => setShowCreatePlaylistModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.playlistModalContainer}>
-            <Text style={styles.playlistModalTitle}>Create Playlist</Text>
-            
-            <TextInput
-              style={styles.playlistModalInput}
-              placeholder="Playlist Name"
-              placeholderTextColor="#7C7899"
-              value={createPlaylistName}
-              onChangeText={setCreatePlaylistName}
-              autoCapitalize="words"
-            />
-            
-            <TextInput
-              style={styles.playlistModalInput}
-              placeholder="Tags (comma separated, e.g. gym, chill)"
-              placeholderTextColor="#7C7899"
-              value={createPlaylistTags}
-              onChangeText={setCreatePlaylistTags}
-              autoCapitalize="none"
-            />
-            
-            <View style={styles.privacyContainer}>
-              <Text style={styles.privacyLabel}>Privacy:</Text>
-              <View style={styles.privacyButtons}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCreatePlaylistModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.playlistModalContainer}>
+              <Text style={styles.playlistModalTitle}>Create Playlist</Text>
+              
+              <TextInput
+                style={styles.playlistModalInput}
+                placeholder="Playlist Name"
+                placeholderTextColor="#7C7899"
+                value={createPlaylistName}
+                onChangeText={setCreatePlaylistName}
+                autoCapitalize="words"
+              />
+              
+              <TextInput
+                style={styles.playlistModalInput}
+                placeholder="Tags (comma separated, e.g. gym, chill)"
+                placeholderTextColor="#7C7899"
+                value={createPlaylistTags}
+                onChangeText={setCreatePlaylistTags}
+                autoCapitalize="none"
+              />
+              
+              <View style={styles.privacyContainer}>
+                <Text style={styles.privacyLabel}>Privacy:</Text>
+                <View style={styles.privacyButtons}>
+                  <TouchableOpacity
+                    style={[styles.privacyBtn, createPlaylistIsPrivate && styles.privacyBtnActive]}
+                    onPress={() => setCreatePlaylistIsPrivate(true)}
+                  >
+                    <Ionicons name="lock-closed" size={16} color={createPlaylistIsPrivate ? '#FFFFFF' : '#7C7899'} />
+                    <Text style={[styles.privacyBtnText, createPlaylistIsPrivate && styles.privacyBtnTextActive]}>Private</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.privacyBtn, !createPlaylistIsPrivate && styles.privacyBtnActive]}
+                    onPress={() => setCreatePlaylistIsPrivate(false)}
+                  >
+                    <Ionicons name="globe" size={16} color={!createPlaylistIsPrivate ? '#FFFFFF' : '#7C7899'} />
+                    <Text style={[styles.privacyBtnText, !createPlaylistIsPrivate && styles.privacyBtnTextActive]}>Public</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              <View style={styles.playlistModalActions}>
                 <TouchableOpacity
-                  style={[styles.privacyBtn, createPlaylistIsPrivate && styles.privacyBtnActive]}
-                  onPress={() => setCreatePlaylistIsPrivate(true)}
+                  style={styles.playlistCancelBtn}
+                  onPress={() => setShowCreatePlaylistModal(false)}
                 >
-                  <Ionicons name="lock-closed" size={16} color={createPlaylistIsPrivate ? '#FFFFFF' : '#7C7899'} />
-                  <Text style={[styles.privacyBtnText, createPlaylistIsPrivate && styles.privacyBtnTextActive]}>Private</Text>
+                  <Text style={styles.playlistCancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity
-                  style={[styles.privacyBtn, !createPlaylistIsPrivate && styles.privacyBtnActive]}
-                  onPress={() => setCreatePlaylistIsPrivate(false)}
+                  style={styles.playlistCreateBtn}
+                  onPress={async () => {
+                    if (!createPlaylistName.trim()) {
+                      Alert.alert('Error', 'Playlist name is required');
+                      return;
+                    }
+                    try {
+                      const res = await api.createPlaylist(
+                        createPlaylistName.trim(),
+                        createPlaylistTags.trim(),
+                        createPlaylistIsPrivate
+                      );
+                      if (res.success) {
+                        setShowCreatePlaylistModal(false);
+                        setCreatePlaylistName('');
+                        setCreatePlaylistTags('');
+                        setCreatePlaylistIsPrivate(true);
+                        await fetchUserPlaylists();
+                      } else {
+                        Alert.alert('Error', res.message || 'Failed to create playlist');
+                      }
+                    } catch (err: any) {
+                      const errorMsg = err.response?.data?.message || 'Failed to create playlist';
+                      Alert.alert('Error', errorMsg);
+                    }
+                  }}
                 >
-                  <Ionicons name="globe" size={16} color={!createPlaylistIsPrivate ? '#FFFFFF' : '#7C7899'} />
-                  <Text style={[styles.privacyBtnText, !createPlaylistIsPrivate && styles.privacyBtnTextActive]}>Public</Text>
+                  <Text style={styles.playlistCreateBtnText}>Create</Text>
                 </TouchableOpacity>
               </View>
             </View>
-            
-            <View style={styles.playlistModalActions}>
-              <TouchableOpacity
-                style={styles.playlistCancelBtn}
-                onPress={() => setShowCreatePlaylistModal(false)}
-              >
-                <Text style={styles.playlistCancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.playlistCreateBtn}
-                onPress={async () => {
-                  if (!createPlaylistName.trim()) {
-                    Alert.alert('Error', 'Playlist name is required');
-                    return;
-                  }
-                  try {
-                    const res = await api.createPlaylist(
-                      createPlaylistName.trim(),
-                      createPlaylistTags.trim(),
-                      createPlaylistIsPrivate
-                    );
-                    if (res.success) {
-                      setShowCreatePlaylistModal(false);
-                      setCreatePlaylistName('');
-                      setCreatePlaylistTags('');
-                      setCreatePlaylistIsPrivate(true);
-                      await fetchUserPlaylists();
-                    } else {
-                      Alert.alert('Error', res.message || 'Failed to create playlist');
-                    }
-                  } catch (err: any) {
-                    const errorMsg = err.response?.data?.message || 'Failed to create playlist';
-                    Alert.alert('Error', errorMsg);
-                  }
-                }}
-              >
-                <Text style={styles.playlistCreateBtnText}>Create</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
 
 
@@ -2058,6 +2095,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#332354',
+  },
+  playlistCardClickableArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   playlistCardIcon: {
     width: 50,

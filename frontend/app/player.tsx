@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, Image, Platform, Modal, TextInput, Alert, ActivityIndicator, FlatList, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, Image, Platform, Modal, TextInput, Alert, ActivityIndicator, FlatList, Animated, Easing, TouchableWithoutFeedback } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
@@ -422,48 +422,50 @@ export default function PlayerScreen() {
           activeOpacity={1} 
           onPress={() => setShowOptionsModal(false)}
         >
-          <View style={styles.optionsContainer}>
-            <Text style={styles.optionsTitle}>Track Actions</Text>
-            
-            {isAdmin && (
+          <TouchableWithoutFeedback>
+            <View style={styles.optionsContainer}>
+              <Text style={styles.optionsTitle}>Track Actions</Text>
+              
+              {isAdmin && (
+                <TouchableOpacity 
+                  style={styles.optionRow} 
+                  onPress={() => {
+                    setShowOptionsModal(false);
+                    router.push('/trim');
+                  }}
+                >
+                  <Ionicons name="cut-outline" size={20} color="#FF3B30" style={{ marginRight: 10 }} />
+                  <Text style={styles.optionText}>Trim this audio (Global Edit)</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity 
+                style={styles.optionRow} 
+                onPress={handleDownloadFull}
+              >
+                <Ionicons name="download-outline" size={20} color="#34C759" style={{ marginRight: 10 }} />
+                <Text style={styles.optionText}>Download full song</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity 
                 style={styles.optionRow} 
                 onPress={() => {
                   setShowOptionsModal(false);
-                  router.push('/trim');
+                  router.push('/trim?mode=ringtone');
                 }}
               >
-                <Ionicons name="cut-outline" size={20} color="#FF3B30" style={{ marginRight: 10 }} />
-                <Text style={styles.optionText}>Trim this audio (Global Edit)</Text>
+                <Ionicons name="musical-note-outline" size={20} color="#BDB4FF" style={{ marginRight: 10 }} />
+                <Text style={styles.optionText}>Make ringtone</Text>
               </TouchableOpacity>
-            )}
 
-            <TouchableOpacity 
-              style={styles.optionRow} 
-              onPress={handleDownloadFull}
-            >
-              <Ionicons name="download-outline" size={20} color="#34C759" style={{ marginRight: 10 }} />
-              <Text style={styles.optionText}>Download full song</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.optionRow} 
-              onPress={() => {
-                setShowOptionsModal(false);
-                router.push('/trim?mode=ringtone');
-              }}
-            >
-              <Ionicons name="musical-note-outline" size={20} color="#BDB4FF" style={{ marginRight: 10 }} />
-              <Text style={styles.optionText}>Make ringtone</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.optionCancelRow} 
-              onPress={() => setShowOptionsModal(false)}
-            >
-              <Text style={styles.optionCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity 
+                style={styles.optionCancelRow} 
+                onPress={() => setShowOptionsModal(false)}
+              >
+                <Text style={styles.optionCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
         </TouchableOpacity>
       </Modal>
 
@@ -474,82 +476,88 @@ export default function PlayerScreen() {
         animationType="slide"
         onRequestClose={() => setShowQueueModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.queueModalContainer}>
-            <View style={styles.queueHeaderRow}>
-              <Text style={styles.queueModalTitle}>Play Queue</Text>
-              <TouchableOpacity onPress={clearQueue} style={styles.clearQueueBtn}>
-                <Text style={styles.clearQueueBtnText}>Clear All</Text>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowQueueModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.queueModalContainer}>
+              <View style={styles.queueHeaderRow}>
+                <Text style={styles.queueModalTitle}>Play Queue</Text>
+                <TouchableOpacity onPress={clearQueue} style={styles.clearQueueBtn}>
+                  <Text style={styles.clearQueueBtnText}>Clear All</Text>
+                </TouchableOpacity>
+              </View>
+
+              <FlatList
+                data={queue}
+                keyExtractor={(item, idx) => `${item._id}-${idx}`}
+                contentContainerStyle={{ paddingBottom: 20 }}
+                style={{ width: '100%', maxHeight: Dimensions.get('window').height * 0.45 }}
+                renderItem={({ item, index }) => {
+                  const isCurrent = index === currentIndex;
+                  const isUpcoming = index > currentIndex;
+
+                  if (!isCurrent && !isUpcoming) return null; // hide past songs
+
+                  return (
+                    <View style={[styles.queueItem, isCurrent && styles.queueItemCurrent]}>
+                      <View style={styles.queueItemInfo}>
+                        <Text style={styles.queueItemTitle} numberOfLines={1}>
+                          {item.title}
+                        </Text>
+                        {isCurrent && <Text style={styles.nowPlayingBadge}>NOW PLAYING</Text>}
+                      </View>
+
+                      {isUpcoming && (
+                        <View style={styles.queueItemActions}>
+                          {/* Move Up */}
+                          {index > currentIndex + 1 && (
+                            <TouchableOpacity 
+                              style={styles.queueActionBtn}
+                              onPress={() => reorderQueue(index, index - 1)}
+                            >
+                              <Ionicons name="arrow-up" size={18} color="#BDB4FF" />
+                            </TouchableOpacity>
+                          )}
+                          
+                          {/* Move Down */}
+                          {index < queue.length - 1 && (
+                            <TouchableOpacity 
+                              style={styles.queueActionBtn}
+                              onPress={() => reorderQueue(index, index + 1)}
+                            >
+                              <Ionicons name="arrow-down" size={18} color="#BDB4FF" />
+                            </TouchableOpacity>
+                          )}
+
+                          {/* Remove */}
+                          <TouchableOpacity 
+                            style={styles.queueActionBtn}
+                            onPress={() => removeFromQueue(index)}
+                          >
+                            <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  );
+                }}
+                ListEmptyComponent={
+                  <Text style={styles.emptyQueueText}>Queue is empty</Text>
+                }
+              />
+
+              <TouchableOpacity 
+                style={styles.closeQueueBtn} 
+                onPress={() => setShowQueueModal(false)}
+              >
+                <Text style={styles.closeQueueBtnText}>Close Queue</Text>
               </TouchableOpacity>
             </View>
-
-            <FlatList
-              data={queue}
-              keyExtractor={(item, idx) => `${item._id}-${idx}`}
-              contentContainerStyle={{ paddingBottom: 20 }}
-              style={{ width: '100%', maxHeight: Dimensions.get('window').height * 0.45 }}
-              renderItem={({ item, index }) => {
-                const isCurrent = index === currentIndex;
-                const isUpcoming = index > currentIndex;
-
-                if (!isCurrent && !isUpcoming) return null; // hide past songs
-
-                return (
-                  <View style={[styles.queueItem, isCurrent && styles.queueItemCurrent]}>
-                    <View style={styles.queueItemInfo}>
-                      <Text style={styles.queueItemTitle} numberOfLines={1}>
-                        {item.title}
-                      </Text>
-                      {isCurrent && <Text style={styles.nowPlayingBadge}>NOW PLAYING</Text>}
-                    </View>
-
-                    {isUpcoming && (
-                      <View style={styles.queueItemActions}>
-                        {/* Move Up */}
-                        {index > currentIndex + 1 && (
-                          <TouchableOpacity 
-                            style={styles.queueActionBtn}
-                            onPress={() => reorderQueue(index, index - 1)}
-                          >
-                            <Ionicons name="arrow-up" size={18} color="#BDB4FF" />
-                          </TouchableOpacity>
-                        )}
-                        
-                        {/* Move Down */}
-                        {index < queue.length - 1 && (
-                          <TouchableOpacity 
-                            style={styles.queueActionBtn}
-                            onPress={() => reorderQueue(index, index + 1)}
-                          >
-                            <Ionicons name="arrow-down" size={18} color="#BDB4FF" />
-                          </TouchableOpacity>
-                        )}
-
-                        {/* Remove */}
-                        <TouchableOpacity 
-                          style={styles.queueActionBtn}
-                          onPress={() => removeFromQueue(index)}
-                        >
-                          <Ionicons name="trash-outline" size={18} color="#FF3B30" />
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                );
-              }}
-              ListEmptyComponent={
-                <Text style={styles.emptyQueueText}>Queue is empty</Text>
-              }
-            />
-
-            <TouchableOpacity 
-              style={styles.closeQueueBtn} 
-              onPress={() => setShowQueueModal(false)}
-            >
-              <Text style={styles.closeQueueBtnText}>Close Queue</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
 
       {/* Playlist Selector Modal */}
@@ -559,183 +567,189 @@ export default function PlayerScreen() {
         animationType="slide"
         onRequestClose={() => setShowPlaylistSelectModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.playlistSelectContainer}>
-            <Text style={styles.playlistSelectTitle}>Add to Playlist</Text>
-            
-            {isLoadingPlaylists ? (
-              <ActivityIndicator size="large" color="#8B5CF6" style={{ marginVertical: 30 }} />
-            ) : (
-              <FlatList
-                data={playlists}
-                keyExtractor={(item) => item._id}
-                style={{ width: '100%', maxHeight: Dimensions.get('window').height * 0.4 }}
-                contentContainerStyle={{ paddingBottom: 15 }}
-                ListHeaderComponent={
-                  <TouchableOpacity
-                    style={styles.createAndAddHeaderBtn}
-                    onPress={() => {
-                      setCreateAndAddName('');
-                      setCreateAndAddTags('');
-                      setCreateAndAddIsPrivate(true);
-                      setShowCreateAndAddModal(true);
-                    }}
-                  >
-                    <Ionicons name="add-circle" size={20} color="#8B5CF6" style={{ marginRight: 8 }} />
-                    <Text style={styles.createAndAddHeaderBtnText}>Create Playlist & Add</Text>
-                  </TouchableOpacity>
-                }
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.playlistSelectItem}
-                    onPress={async () => {
-                      try {
-                        const res = await api.addSongToPlaylist(item._id, currentlyPlaying._id);
-                        if (res.success) {
-                          Alert.alert('Success', `Added to ${item.name}`);
-                          setShowPlaylistSelectModal(false);
-                        } else {
-                          Alert.alert('Error', res.message || 'Failed to add song to playlist');
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPlaylistSelectModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.playlistSelectContainer}>
+              <Text style={styles.playlistSelectTitle}>Add to Playlist</Text>
+              
+              {isLoadingPlaylists ? (
+                <ActivityIndicator size="large" color="#8B5CF6" style={{ marginVertical: 30 }} />
+              ) : (
+                <FlatList
+                  data={playlists}
+                  keyExtractor={(item) => item._id}
+                  style={{ width: '100%', maxHeight: Dimensions.get('window').height * 0.4 }}
+                  contentContainerStyle={{ paddingBottom: 15 }}
+                  ListHeaderComponent={
+                    <TouchableOpacity
+                      style={styles.createAndAddHeaderBtn}
+                      onPress={() => {
+                        setCreateAndAddName('');
+                        setCreateAndAddTags('');
+                        setCreateAndAddIsPrivate(true);
+                        setShowCreateAndAddModal(true);
+                      }}
+                    >
+                      <Ionicons name="add-circle" size={20} color="#8B5CF6" style={{ marginRight: 8 }} />
+                      <Text style={styles.createAndAddHeaderBtnText}>Create Playlist</Text>
+                    </TouchableOpacity>
+                  }
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.playlistSelectItem}
+                      onPress={async () => {
+                        try {
+                          const res = await api.addSongToPlaylist(item._id, currentlyPlaying._id);
+                          if (res.success) {
+                            Alert.alert('Success', `Added to ${item.name}`);
+                            setShowPlaylistSelectModal(false);
+                          } else {
+                            Alert.alert('Error', res.message || 'Failed to add song to playlist');
+                          }
+                        } catch (err: any) {
+                          const errorMsg = err.response?.data?.message || 'Failed to add song to playlist';
+                          Alert.alert('Error', errorMsg);
                         }
-                      } catch (err: any) {
-                        const errorMsg = err.response?.data?.message || 'Failed to add song to playlist';
-                        Alert.alert('Error', errorMsg);
-                      }
-                    }}
-                  >
-                    <View style={styles.playlistSelectItemIcon}>
-                      <Ionicons name="musical-notes-outline" size={20} color="#8B5CF6" />
-                    </View>
-                    <View style={styles.playlistSelectItemInfo}>
-                      <Text style={styles.playlistSelectItemName} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.playlistSelectItemCount}>
-                        {item.songs?.length || 0} {item.songs?.length === 1 ? 'song' : 'songs'}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward-outline" size={16} color="#7C7899" />
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <View style={styles.emptyPlaylistsContainer}>
-                    <Text style={styles.emptyPlaylistsText}>No custom playlists found.</Text>
-                    <Text style={styles.emptyPlaylistsSubtext}>Create one using the button above or in Library tab.</Text>
-                  </View>
-                }
-              />
-            )}
-            
-            <TouchableOpacity
-              style={styles.playlistSelectCancelBtn}
-              onPress={() => setShowPlaylistSelectModal(false)}
-            >
-              <Text style={styles.playlistSelectCancelBtnText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+                      }}
+                    >
+                      <View style={styles.playlistSelectItemIcon}>
+                        <Ionicons name="musical-notes-outline" size={20} color="#8B5CF6" />
+                      </View>
+                      <View style={styles.playlistSelectItemInfo}>
+                        <Text style={styles.playlistSelectItemName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.playlistSelectItemCount}>
+                          {item.songs?.length || 0} {item.songs?.length === 1 ? 'song' : 'songs'}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward-outline" size={16} color="#7C7899" />
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+              
+              <TouchableOpacity
+                style={styles.playlistSelectCancelBtn}
+                onPress={() => setShowPlaylistSelectModal(false)}
+              >
+                <Text style={styles.playlistSelectCancelBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
 
-      {/* Create Playlist & Add Modal */}
+      {/* Create Playlist Modal */}
       <Modal
         visible={showCreateAndAddModal}
         transparent={true}
         animationType="slide"
         onRequestClose={() => setShowCreateAndAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.playlistModalContainer}>
-            <Text style={styles.playlistModalTitle}>Create Playlist & Add</Text>
-            
-            <TextInput
-              style={styles.playlistModalInput}
-              placeholder="Playlist Name"
-              placeholderTextColor="#7C7899"
-              value={createAndAddName}
-              onChangeText={setCreateAndAddName}
-              autoCapitalize="words"
-            />
-            
-            <TextInput
-              style={styles.playlistModalInput}
-              placeholder="Tags (comma separated, e.g. gym, chill)"
-              placeholderTextColor="#7C7899"
-              value={createAndAddTags}
-              onChangeText={setCreateAndAddTags}
-              autoCapitalize="none"
-            />
-            
-            <View style={styles.privacyContainer}>
-              <Text style={styles.privacyLabel}>Privacy:</Text>
-              <View style={styles.privacyButtons}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCreateAndAddModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.playlistModalContainer}>
+              <Text style={styles.playlistModalTitle}>Create Playlist</Text>
+              
+              <TextInput
+                style={styles.playlistModalInput}
+                placeholder="Playlist Name"
+                placeholderTextColor="#7C7899"
+                value={createAndAddName}
+                onChangeText={setCreateAndAddName}
+                autoCapitalize="words"
+              />
+              
+              <TextInput
+                style={styles.playlistModalInput}
+                placeholder="Tags (comma separated, e.g. gym, chill)"
+                placeholderTextColor="#7C7899"
+                value={createAndAddTags}
+                onChangeText={setCreateAndAddTags}
+                autoCapitalize="none"
+              />
+              
+              <View style={styles.privacyContainer}>
+                <Text style={styles.privacyLabel}>Privacy:</Text>
+                <View style={styles.privacyButtons}>
+                  <TouchableOpacity
+                    style={[styles.privacyBtn, createAndAddIsPrivate && styles.privacyBtnActive]}
+                    onPress={() => setCreateAndAddIsPrivate(true)}
+                  >
+                    <Ionicons name="lock-closed" size={16} color={createAndAddIsPrivate ? '#FFFFFF' : '#7C7899'} />
+                    <Text style={[styles.privacyBtnText, createAndAddIsPrivate && styles.privacyBtnTextActive]}>Private</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.privacyBtn, !createAndAddIsPrivate && styles.privacyBtnActive]}
+                    onPress={() => setCreateAndAddIsPrivate(false)}
+                  >
+                    <Ionicons name="globe" size={16} color={!createAndAddIsPrivate ? '#FFFFFF' : '#7C7899'} />
+                    <Text style={[styles.privacyBtnText, !createAndAddIsPrivate && styles.privacyBtnTextActive]}>Public</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              <View style={styles.playlistModalActions}>
                 <TouchableOpacity
-                  style={[styles.privacyBtn, createAndAddIsPrivate && styles.privacyBtnActive]}
-                  onPress={() => setCreateAndAddIsPrivate(true)}
+                  style={styles.playlistCancelBtn}
+                  onPress={() => setShowCreateAndAddModal(false)}
                 >
-                  <Ionicons name="lock-closed" size={16} color={createAndAddIsPrivate ? '#FFFFFF' : '#7C7899'} />
-                  <Text style={[styles.privacyBtnText, createAndAddIsPrivate && styles.privacyBtnTextActive]}>Private</Text>
+                  <Text style={styles.playlistCancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity
-                  style={[styles.privacyBtn, !createAndAddIsPrivate && styles.privacyBtnActive]}
-                  onPress={() => setCreateAndAddIsPrivate(false)}
+                  style={styles.playlistCreateBtn}
+                  onPress={async () => {
+                    if (!createAndAddName.trim()) {
+                      Alert.alert('Error', 'Playlist name is required');
+                      return;
+                    }
+                    try {
+                      const createRes = await api.createPlaylist(
+                        createAndAddName.trim(),
+                        createAndAddTags.trim(),
+                        createAndAddIsPrivate
+                      );
+                      
+                      if (createRes.success && createRes.data) {
+                        const newPlaylistId = createRes.data._id;
+                        const addRes = await api.addSongToPlaylist(newPlaylistId, currentlyPlaying._id);
+                        
+                        if (addRes.success) {
+                          Alert.alert('Success', `Playlist created and "${currentlyPlaying.title}" added!`);
+                          setShowCreateAndAddModal(false);
+                          setShowPlaylistSelectModal(false);
+                          setCreateAndAddName('');
+                          setCreateAndAddTags('');
+                          setCreateAndAddIsPrivate(true);
+                        } else {
+                          Alert.alert('Error', addRes.message || 'Failed to add song to the new playlist');
+                        }
+                      } else {
+                        Alert.alert('Error', createRes.message || 'Failed to create playlist');
+                      }
+                    } catch (err: any) {
+                      const errorMsg = err.response?.data?.message || 'Failed to create and add';
+                      Alert.alert('Error', errorMsg);
+                    }
+                  }}
                 >
-                  <Ionicons name="globe" size={16} color={!createAndAddIsPrivate ? '#FFFFFF' : '#7C7899'} />
-                  <Text style={[styles.privacyBtnText, !createAndAddIsPrivate && styles.privacyBtnTextActive]}>Public</Text>
+                  <Text style={styles.playlistCreateBtnText}>Create Playlist</Text>
                 </TouchableOpacity>
               </View>
             </View>
-            
-            <View style={styles.playlistModalActions}>
-              <TouchableOpacity
-                style={styles.playlistCancelBtn}
-                onPress={() => setShowCreateAndAddModal(false)}
-              >
-                <Text style={styles.playlistCancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.playlistCreateBtn}
-                onPress={async () => {
-                  if (!createAndAddName.trim()) {
-                    Alert.alert('Error', 'Playlist name is required');
-                    return;
-                  }
-                  try {
-                    const createRes = await api.createPlaylist(
-                      createAndAddName.trim(),
-                      createAndAddTags.trim(),
-                      createAndAddIsPrivate
-                    );
-                    
-                    if (createRes.success && createRes.data) {
-                      const newPlaylistId = createRes.data._id;
-                      const addRes = await api.addSongToPlaylist(newPlaylistId, currentlyPlaying._id);
-                      
-                      if (addRes.success) {
-                        Alert.alert('Success', `Playlist created and "${currentlyPlaying.title}" added!`);
-                        setShowCreateAndAddModal(false);
-                        setShowPlaylistSelectModal(false);
-                        setCreateAndAddName('');
-                        setCreateAndAddTags('');
-                        setCreateAndAddIsPrivate(true);
-                      } else {
-                        Alert.alert('Error', addRes.message || 'Failed to add song to the new playlist');
-                      }
-                    } else {
-                      Alert.alert('Error', createRes.message || 'Failed to create playlist');
-                    }
-                  } catch (err: any) {
-                    const errorMsg = err.response?.data?.message || 'Failed to create and add';
-                    Alert.alert('Error', errorMsg);
-                  }
-                }}
-              >
-                <Text style={styles.playlistCreateBtnText}>Create & Add</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
 
       {/* Custom Download Progress Modal */}
@@ -745,20 +759,26 @@ export default function PlayerScreen() {
         animationType="fade"
         onRequestClose={() => {}}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.downloadModalContainer}>
-            <ActivityIndicator size="large" color="#8B5CF6" style={{ marginBottom: 20 }} />
-            <Text style={styles.downloadModalTitle}>Downloading Song</Text>
-            <Text style={styles.downloadPercentage}>{downloadProgress}%</Text>
-            
-            {/* Progress Bar Track */}
-            <View style={styles.progressBarTrack}>
-              <View style={[styles.progressBarFill, { width: `${downloadProgress}%` }]} />
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDownloadProgressModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.downloadModalContainer}>
+              <ActivityIndicator size="large" color="#8B5CF6" style={{ marginBottom: 20 }} />
+              <Text style={styles.downloadModalTitle}>Downloading Song</Text>
+              <Text style={styles.downloadPercentage}>{downloadProgress}%</Text>
+              
+              {/* Progress Bar Track */}
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: `${downloadProgress}%` }]} />
+              </View>
+              
+              <Text style={styles.downloadProgressSub}>{downloadProgressText}</Text>
             </View>
-            
-            <Text style={styles.downloadProgressSub}>{downloadProgressText}</Text>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );

@@ -12,7 +12,8 @@ import {
   Alert,
   PanResponder,
   TextInput,
-  Modal
+  Modal,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -685,35 +686,41 @@ export default function TrimScreen() {
         animationType="fade"
         onRequestClose={() => setShowConfirmModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmModalContainer}>
-            <Ionicons name={isRingtoneMode ? "information-circle-outline" : "warning"} size={48} color={isRingtoneMode ? "#8B5CF6" : "#FF3B30"} style={{ marginBottom: 15 }} />
-            <Text style={styles.confirmModalTitle}>
-              {isRingtoneMode ? 'Download this ringtone?' : 'Are you sure you want to trim?'}
-            </Text>
-            <Text style={styles.confirmModalSub}>
-              {isRingtoneMode
-                ? 'This will trim the selected section and download it to your device. The original song will not be affected.'
-                : 'Trimming as admin, the trim would be reflected with all the users.'}
-            </Text>
-            
-            <View style={styles.confirmActionRow}>
-              <TouchableOpacity 
-                style={styles.confirmCancelBtn} 
-                onPress={() => setShowConfirmModal(false)}
-              >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowConfirmModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              <Ionicons name={isRingtoneMode ? "information-circle-outline" : "warning"} size={48} color={isRingtoneMode ? "#8B5CF6" : "#FF3B30"} style={{ marginBottom: 15 }} />
+              <Text style={styles.confirmModalTitle}>
+                {isRingtoneMode ? 'Download this ringtone?' : 'Are you sure you want to trim?'}
+              </Text>
+              <Text style={styles.confirmModalSub}>
+                {isRingtoneMode
+                  ? 'This will trim the selected section and download it to your device. The original song will not be affected.'
+                  : 'Trimming as admin, the trim would be reflected with all the users.'}
+              </Text>
               
-              <TouchableOpacity 
-                style={styles.confirmSaveBtn} 
-                onPress={executeTrim}
-              >
-                <Text style={styles.confirmSaveText}>Confirm</Text>
-              </TouchableOpacity>
+              <View style={styles.confirmActionRow}>
+                <TouchableOpacity 
+                  style={styles.confirmCancelBtn} 
+                  onPress={() => setShowConfirmModal(false)}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.confirmSaveBtn} 
+                  onPress={executeTrim}
+                >
+                  <Text style={styles.confirmSaveText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
 
       {/* Custom Loading Modal */}
@@ -723,20 +730,26 @@ export default function TrimScreen() {
         animationType="fade"
         onRequestClose={() => {}}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.loadingModalContainer}>
-            <ActivityIndicator size="large" color="#8B5CF6" style={{ marginBottom: 20 }} />
-            <Text style={styles.loadingModalTitle}>{isRingtoneMode ? 'Downloading Ringtone' : 'Trimming Audio'}</Text>
-            <Text style={styles.loadingPercentage}>{Math.floor(trimProgress)}%</Text>
-            
-            {/* Progress Bar Track */}
-            <View style={styles.progressBarTrack}>
-              <View style={[styles.progressBarFill, { width: `${trimProgress}%` }]} />
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLoadingModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.loadingModalContainer}>
+              <ActivityIndicator size="large" color="#8B5CF6" style={{ marginBottom: 20 }} />
+              <Text style={styles.loadingModalTitle}>{isRingtoneMode ? 'Downloading Ringtone' : 'Trimming Audio'}</Text>
+              <Text style={styles.loadingPercentage}>{Math.floor(trimProgress)}%</Text>
+              
+              {/* Progress Bar Track */}
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: `${trimProgress}%` }]} />
+              </View>
+              
+              <Text style={styles.loadingProgressSub}>{trimProgressText}</Text>
             </View>
-            
-            <Text style={styles.loadingProgressSub}>{trimProgressText}</Text>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
