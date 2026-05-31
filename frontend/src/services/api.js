@@ -116,6 +116,17 @@ export const api = {
     return response.data;
   },
 
+  // Update playlist properties (name, tags, isPrivate)
+  updatePlaylist: async (playlistId, updates) => {
+    const token = await AsyncStorage.getItem('token');
+    const response = await axios.patch(`${API_URL}/playlists/${playlistId}`, updates, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
   // Add song to playlist
   addSongToPlaylist: async (playlistId, songId) => {
     const token = await AsyncStorage.getItem('token');

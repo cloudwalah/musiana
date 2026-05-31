@@ -72,12 +72,12 @@ export default function HomeScreen() {
   // This ensures that after a trim (or any other mutation), the home screen
   // always reflects the latest data from the server without needing a full
   // app reload.
-  const fetchUserPlaylists = async () => {
+  const fetchUserPlaylists = async (shouldRefreshSelected = true) => {
     try {
       setLibraryLoading(true);
       const res = await api.fetchPlaylists();
       setUserPlaylists(res.data || []);
-      if (selectedPlaylist) {
+      if (shouldRefreshSelected && selectedPlaylist) {
         const updatedPlaylist = res.data.find((p: any) => p._id === selectedPlaylist._id);
         if (updatedPlaylist) {
           setSelectedPlaylist(updatedPlaylist);
@@ -134,7 +134,7 @@ export default function HomeScreen() {
     handleCancelSearch();
     setSelectedPlaylist(null);
     if (tab === 'playlists') {
-      fetchUserPlaylists();
+      fetchUserPlaylists(false);
     }
   };
 
@@ -399,7 +399,7 @@ export default function HomeScreen() {
               const res = await api.deletePlaylist(selectedPlaylist._id);
               if (res.success) {
                 setSelectedPlaylist(null);
-                await fetchUserPlaylists();
+                await fetchUserPlaylists(false);
               } else {
                 Alert.alert('Error', res.message || 'Failed to delete playlist');
               }
@@ -510,6 +510,16 @@ export default function HomeScreen() {
           <Text style={styles.headerTitleLeft} numberOfLines={1}>
             {selectedPlaylist.name}
           </Text>
+          {selectedPlaylist.songs && selectedPlaylist.songs.length > 0 ? (
+            <TouchableOpacity
+              style={styles.headerPlayPlaylistBtn}
+              onPress={() => handlePlayPlaylist(selectedPlaylist)}
+            >
+              <Ionicons name="play" size={20} color="#FFFFFF" style={{ marginLeft: 2 }} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 36 }} />
+          )}
         </View>
 
         <FlatList
@@ -523,7 +533,7 @@ export default function HomeScreen() {
           ListHeaderComponent={
             <View style={styles.detailsHeaderSection}>
               <Text style={styles.detailsMeta}>
-                {selectedPlaylist.isDefault ? 'Default Playlist' : (selectedPlaylist.isPrivate ? 'Private' : 'Public')} • {selectedPlaylist.songs?.length || 0} {selectedPlaylist.songs?.length === 1 ? 'song' : 'songs'}
+                {selectedPlaylist.isDefault ? 'Default Playlist' : (selectedPlaylist.isPrivate ? 'Private' : 'Public')}
               </Text>
               
               {selectedPlaylist.tags && selectedPlaylist.tags.length > 0 && (
@@ -535,30 +545,9 @@ export default function HomeScreen() {
                   ))}
                 </View>
               )}
-
-              <View style={styles.detailsActionsRow}>
-                {selectedPlaylist.songs && selectedPlaylist.songs.length > 0 ? (
-                  <TouchableOpacity
-                    style={styles.detailsPlayIconBtn}
-                    onPress={() => handlePlayPlaylist(selectedPlaylist)}
-                  >
-                    <Ionicons name="play" size={28} color="#FFFFFF" style={{ marginLeft: 3 }} />
-                  </TouchableOpacity>
-                ) : null}
-
-                {!selectedPlaylist.isDefault && (
-                  <TouchableOpacity
-                    style={styles.detailsDeletePlaylistBtn}
-                    onPress={handleDeletePlaylist}
-                  >
-                    <Ionicons name="trash-outline" size={18} color="#FF3B30" style={{ marginRight: 6 }} />
-                    <Text style={styles.detailsDeletePlaylistBtnText}>Delete Playlist</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
             </View>
           }
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             const isPlayingCurrent = currentlyPlaying?._id === item._id && isPlaying;
             return (
               <View style={styles.detailsSongItem}>
@@ -573,6 +562,7 @@ export default function HomeScreen() {
                     router.push('/player');
                   }}
                 >
+                  <Text style={styles.detailsSongNumber}>{index + 1}</Text>
                   <View style={styles.detailsSongArt}>
                     {item.imageUrl ? (
                       <Image source={{ uri: item.imageUrl }} style={styles.detailsSongCover} />
@@ -877,6 +867,67 @@ export default function HomeScreen() {
     );
   };
 
+  const handlePlaylistOptionsPress = (playlist: any) => {
+    if (playlist.isDefault) return;
+    
+    const visibilityLabel = playlist.isPrivate ? 'Make Public' : 'Make Private';
+    
+    Alert.alert(
+      'Playlist Options',
+      `Manage "${playlist.name}"`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: visibilityLabel,
+          onPress: async () => {
+            try {
+              const res = await api.updatePlaylist(playlist._id, { isPrivate: !playlist.isPrivate });
+              if (res.success) {
+                Alert.alert('Success', `Playlist is now ${playlist.isPrivate ? 'Public' : 'Private'}`);
+                await fetchUserPlaylists(false);
+              } else {
+                Alert.alert('Error', res.message || 'Failed to update visibility');
+              }
+            } catch (err: any) {
+              const errorMsg = err.response?.data?.message || 'Failed to update visibility';
+              Alert.alert('Error', errorMsg);
+            }
+          }
+        },
+        {
+          text: 'Delete Playlist',
+          style: 'destructive',
+          onPress: async () => {
+            Alert.alert(
+              'Delete Playlist',
+              `Are you sure you want to delete "${playlist.name}"?`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'Delete', 
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const res = await api.deletePlaylist(playlist._id);
+                      if (res.success) {
+                        await fetchUserPlaylists(false);
+                      } else {
+                        Alert.alert('Error', res.message || 'Failed to delete playlist');
+                      }
+                    } catch (err: any) {
+                      const errorMsg = err.response?.data?.message || 'Failed to delete playlist';
+                      Alert.alert('Error', errorMsg);
+                    }
+                  }
+                }
+              ]
+            );
+          }
+        }
+      ]
+    );
+  };
+
   const renderPlaylistItem = ({ item }: { item: any }) => {
     const songCount = item.songs?.length || 0;
     return (
@@ -904,7 +955,16 @@ export default function HomeScreen() {
             </Text>
           )}
         </View>
-        <Ionicons name="chevron-forward-outline" size={18} color="#7C7899" />
+        {item.isDefault ? (
+          <Ionicons name="chevron-forward-outline" size={18} color="#7C7899" />
+        ) : (
+          <TouchableOpacity 
+            style={{ padding: 10 }}
+            onPress={() => handlePlaylistOptionsPress(item)}
+          >
+            <Ionicons name="ellipsis-vertical" size={20} color="#7C7899" />
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
     );
   };
@@ -2202,5 +2262,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
     flex: 1,
+  },
+  headerPlayPlaylistBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  detailsSongNumber: {
+    fontSize: 14,
+    color: '#7C7899',
+    width: 24,
+    textAlign: 'center',
+    marginRight: 8,
+    fontWeight: '500',
   },
 });

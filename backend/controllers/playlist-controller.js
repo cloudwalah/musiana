@@ -293,6 +293,51 @@ const checkSongLiked = async (req, res) => {
       error: error.message
     });
   }
+// PATCH /api/playlists/:id
+const updatePlaylist = async (req, res) => {
+  const userId = req.userInfo.userId;
+  const { id } = req.params;
+  const { isPrivate, name, tags } = req.body;
+
+  try {
+    const playlist = await Playlist.findOne({ _id: id, user: userId });
+    if (!playlist) {
+      return res.status(404).json({
+        success: false,
+        message: 'Playlist not found'
+      });
+    }
+
+    if (playlist.isDefault) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot modify the default liked songs playlist.'
+      });
+    }
+
+    if (isPrivate !== undefined) playlist.isPrivate = isPrivate;
+    if (name !== undefined) playlist.name = name.trim();
+    if (tags !== undefined) {
+      playlist.tags = Array.isArray(tags)
+        ? tags.map(t => t.trim().toLowerCase()).filter(Boolean)
+        : tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    }
+
+    await playlist.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Playlist updated successfully',
+      data: playlist
+    });
+  } catch (error) {
+    console.error('❌ updatePlaylist Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update playlist',
+      error: error.message
+    });
+  }
 };
 
 module.exports = {
@@ -302,5 +347,6 @@ module.exports = {
   addSongToPlaylist,
   removeSongFromPlaylist,
   toggleLikeSong,
-  checkSongLiked
+  checkSongLiked,
+  updatePlaylist
 };

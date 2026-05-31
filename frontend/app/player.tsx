@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, Image, Platform, Modal, TextInput, Alert, ActivityIndicator, FlatList, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, Image, Platform, Modal, TextInput, Alert, ActivityIndicator, FlatList, Animated, Easing } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
@@ -21,24 +21,17 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
   useEffect(() => {
     animatedValue.setValue(0);
     if (textWidth > containerWidth && containerWidth > 0) {
-      const scrollRange = textWidth - containerWidth + 30; // 30px padding at end
-      const duration = scrollRange * 40; // 40ms per pixel scroll speed
+      const spacerWidth = 50;
+      const scrollRange = textWidth + spacerWidth;
+      const duration = scrollRange * 35; // 35ms per pixel scroll speed
       
       const animation = Animated.loop(
-        Animated.sequence([
-          Animated.delay(2000),
-          Animated.timing(animatedValue, {
-            toValue: -scrollRange,
-            duration: duration,
-            useNativeDriver: true,
-          }),
-          Animated.delay(2000),
-          Animated.timing(animatedValue, {
-            toValue: 0,
-            duration: duration,
-            useNativeDriver: true,
-          }),
-        ])
+        Animated.timing(animatedValue, {
+          toValue: -scrollRange,
+          duration: duration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
       );
       animation.start();
       return () => animation.stop();
@@ -61,7 +54,7 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
         style={{
           flexDirection: 'row',
           transform: [{ translateX: animatedValue }],
-          width: isScrollable ? textWidth : '100%',
+          width: isScrollable ? (textWidth * 2 + 50) : '100%',
           justifyContent: isScrollable ? 'flex-start' : 'center',
         }}
       >
@@ -72,6 +65,17 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
         >
           {text}
         </Text>
+        {isScrollable && (
+          <>
+            <View style={{ width: 50 }} />
+            <Text
+              style={[style, { width: 'auto', textAlign: 'left' }]}
+              numberOfLines={1}
+            >
+              {text}
+            </Text>
+          </>
+        )}
       </Animated.View>
     </View>
   );

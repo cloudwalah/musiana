@@ -6,7 +6,8 @@ const {
   addSongToPlaylist,
   removeSongFromPlaylist,
   toggleLikeSong,
-  checkSongLiked
+  checkSongLiked,
+  updatePlaylist
 } = require('../controllers/playlist-controller');
 const authMiddleware = require('../middlewares/auth-middleware');
 
@@ -20,6 +21,9 @@ router.get('/', getUserPlaylists);
 
 // POST /api/playlists - Create new playlist
 router.post('/', createPlaylist);
+
+// PATCH /api/playlists/:id - Update playlist properties (isPrivate, tags, name)
+router.patch('/:id', updatePlaylist);
 
 // DELETE /api/playlists/:id - Delete playlist
 router.delete('/:id', deletePlaylist);
