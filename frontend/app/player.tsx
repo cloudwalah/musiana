@@ -6,6 +6,7 @@ import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import * as Haptics from 'expo-haptics';
 import { useAudio } from '../src/context/AudioContext';
 import { api } from '../src/services/api';
 
@@ -51,6 +52,12 @@ export default function PlayerScreen() {
   const [showDownloadProgressModal, setShowDownloadProgressModal] = useState(false);
   const [downloadProgressText, setDownloadProgressText] = useState('');
 
+  // Likes & Playlists state
+  const [isLiked, setIsLiked] = useState(false);
+  const [playlists, setPlaylists] = useState<any[]>([]);
+  const [showPlaylistSelectModal, setShowPlaylistSelectModal] = useState(false);
+  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
+
   // If we are not sliding, sync the sliding value with the actual position
   useEffect(() => {
     if (!isSliding) {
@@ -72,6 +79,48 @@ export default function PlayerScreen() {
     };
     checkUserRole();
   }, []);
+
+  useEffect(() => {
+    const fetchLikedStatus = async () => {
+      if (currentlyPlaying?._id) {
+        try {
+          const res = await api.checkSongLiked(currentlyPlaying._id);
+          setIsLiked(!!res.liked);
+        } catch (err) {
+          console.log('Error checking liked status:', err);
+        }
+      }
+    };
+    fetchLikedStatus();
+  }, [currentlyPlaying?._id]);
+
+  const handleToggleLike = async () => {
+    if (!currentlyPlaying?._id) return;
+    try {
+      if (Platform.OS !== 'web') {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      const res = await api.toggleLikeSong(currentlyPlaying._id);
+      setIsLiked(!!res.liked);
+    } catch (err) {
+      console.log('Error toggling like status:', err);
+      Alert.alert('Error', 'Failed to update like status');
+    }
+  };
+
+  const loadPlaylistsForSelection = async () => {
+    try {
+      setIsLoadingPlaylists(true);
+      const res = await api.fetchPlaylists();
+      const customPlaylists = res.data.filter((p: any) => !p.isDefault);
+      setPlaylists(customPlaylists);
+    } catch (err) {
+      console.log('Error loading playlists:', err);
+      Alert.alert('Error', 'Failed to load playlists');
+    } finally {
+      setIsLoadingPlaylists(false);
+    }
+  };
 
   if (!currentlyPlaying) {
     return (
@@ -190,9 +239,18 @@ export default function PlayerScreen() {
         </View>
 
         {/* Song Info */}
-        <View style={styles.infoContainer}>
-          <Text style={styles.songTitle} numberOfLines={1}>{currentlyPlaying.title}</Text>
-          <Text style={styles.artistName}>Musiana Library</Text>
+        <View style={styles.songInfoRow}>
+          <View style={styles.infoTextContainer}>
+            <Text style={styles.songTitle} numberOfLines={1}>{currentlyPlaying.title}</Text>
+            <Text style={styles.artistName}>Musiana Library</Text>
+          </View>
+          <TouchableOpacity onPress={handleToggleLike} style={styles.heartButton}>
+            <Ionicons 
+              name={isLiked ? 'heart' : 'heart-outline'} 
+              size={30} 
+              color={isLiked ? '#FF3B30' : '#BDB4FF'} 
+            />
+          </TouchableOpacity>
         </View>
 
         {/* Timeline Slider */}
@@ -302,6 +360,18 @@ export default function PlayerScreen() {
               style={styles.optionRow} 
               onPress={() => {
                 setShowOptionsModal(false);
+                loadPlaylistsForSelection();
+                setShowPlaylistSelectModal(true);
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={20} color="#8B5CF6" style={{ marginRight: 10 }} />
+              <Text style={styles.optionText}>Add to Playlist</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.optionRow} 
+              onPress={() => {
+                setShowOptionsModal(false);
                 router.push('/trim?mode=ringtone');
               }}
             >
@@ -399,6 +469,76 @@ export default function PlayerScreen() {
               onPress={() => setShowQueueModal(false)}
             >
               <Text style={styles.closeQueueBtnText}>Close Queue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Playlist Selector Modal */}
+      <Modal
+        visible={showPlaylistSelectModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowPlaylistSelectModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.playlistSelectContainer}>
+            <Text style={styles.playlistSelectTitle}>Add to Playlist</Text>
+            
+            {isLoadingPlaylists ? (
+              <ActivityIndicator size="large" color="#8B5CF6" style={{ marginVertical: 30 }} />
+            ) : (
+              <FlatList
+                data={playlists}
+                keyExtractor={(item) => item._id}
+                style={{ width: '100%', maxHeight: Dimensions.get('window').height * 0.4 }}
+                contentContainerStyle={{ paddingBottom: 15 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.playlistSelectItem}
+                    onPress={async () => {
+                      try {
+                        const res = await api.addSongToPlaylist(item._id, currentlyPlaying._id);
+                        if (res.success) {
+                          Alert.alert('Success', `Added to ${item.name}`);
+                          setShowPlaylistSelectModal(false);
+                        } else {
+                          Alert.alert('Error', res.message || 'Failed to add song to playlist');
+                        }
+                      } catch (err: any) {
+                        const errorMsg = err.response?.data?.message || 'Failed to add song to playlist';
+                        Alert.alert('Error', errorMsg);
+                      }
+                    }}
+                  >
+                    <View style={styles.playlistSelectItemIcon}>
+                      <Ionicons name="musical-notes-outline" size={20} color="#8B5CF6" />
+                    </View>
+                    <View style={styles.playlistSelectItemInfo}>
+                      <Text style={styles.playlistSelectItemName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.playlistSelectItemCount}>
+                        {item.songs?.length || 0} {item.songs?.length === 1 ? 'song' : 'songs'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward-outline" size={16} color="#7C7899" />
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyPlaylistsContainer}>
+                    <Text style={styles.emptyPlaylistsText}>No custom playlists found.</Text>
+                    <Text style={styles.emptyPlaylistsSubtext}>Create one in the Library tab first.</Text>
+                  </View>
+                }
+              />
+            )}
+            
+            <TouchableOpacity
+              style={styles.playlistSelectCancelBtn}
+              onPress={() => setShowPlaylistSelectModal(false)}
+            >
+              <Text style={styles.playlistSelectCancelBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -756,5 +896,100 @@ const styles = StyleSheet.create({
     color: '#7C7899',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  songInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 20,
+    marginVertical: 10,
+  },
+  infoTextContainer: {
+    flex: 1,
+    alignItems: 'flex-start',
+    marginRight: 10,
+  },
+  heartButton: {
+    padding: 10,
+  },
+  playlistSelectContainer: {
+    width: '90%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#332354',
+    maxHeight: '70%',
+    alignItems: 'center',
+  },
+  playlistSelectTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#332354',
+    paddingBottom: 10,
+    width: '100%',
+    textAlign: 'center',
+  },
+  playlistSelectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#251842',
+    width: '100%',
+  },
+  playlistSelectItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#251842',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  playlistSelectItemInfo: {
+    flex: 1,
+  },
+  playlistSelectItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  playlistSelectItemCount: {
+    fontSize: 12,
+    color: '#7C7899',
+    marginTop: 2,
+  },
+  playlistSelectCancelBtn: {
+    marginTop: 15,
+    paddingVertical: 10,
+    width: '100%',
+    alignItems: 'center',
+  },
+  playlistSelectCancelBtnText: {
+    color: '#7C7899',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  emptyPlaylistsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+  },
+  emptyPlaylistsText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  emptyPlaylistsSubtext: {
+    color: '#7C7899',
+    fontSize: 14,
+    marginTop: 5,
+    textAlign: 'center',
   },
 });

@@ -5,6 +5,7 @@ const userRoutes = require('./routes/userRoutes')
 const uploadRoutes = require('./routes/uploadRoutes')
 const fetchRoutes = require('./routes/fetchRoutes')
 const searchRoutes = require('./routes/searchRoutes')
+const playlistRoutes = require('./routes/playlistRoutes')
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,6 +18,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/fetch', fetchRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/playlists', playlistRoutes);
 
 app.get('/api/debug', async (req, res) => {
     const { exec } = require('child_process');

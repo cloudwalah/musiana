@@ -1,8 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// const API_URL = 'http://192.168.29.136:3000/api';  // ✅ Local physical device (dev only)
-const API_URL = 'https://musiana-1e9c.onrender.com/api';  // Production (Render)
+const API_URL = 'http://192.168.29.92:3000/api';  // Local backend for Expo Go development
+// const API_URL = 'https://musiana-1e9c.onrender.com/api';  // Production (Render)
 
 export const api = {
   // Register new user
@@ -56,7 +56,7 @@ export const api = {
   },
 
   // Search music by query (requires authentication)
-  searchMusic: async (query) => {
+  searchMusic: async (query, type = 'songs') => {
     const token = await AsyncStorage.getItem('token');
     
     console.log('🚀 Searching music...');
@@ -64,13 +64,101 @@ export const api = {
     console.log('🔑 Token:', token ? 'Present' : 'Missing');
     
     const response = await axios.get(`${API_URL}/search`, {
-      params: { q: query },
+      params: { q: query, type },
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
     
     console.log('✅ Search response:', response.data);
+    return response.data;
+  },
+
+  // Fetch all playlists owned by user
+  fetchPlaylists: async () => {
+    const token = await AsyncStorage.getItem('token');
+    const response = await axios.get(`${API_URL}/playlists`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  // Create custom playlist
+  createPlaylist: async (name, tags = '', isPrivate = true) => {
+    const token = await AsyncStorage.getItem('token');
+    
+    const tagsArray = typeof tags === 'string'
+      ? tags.split(',').map(t => t.trim()).filter(Boolean)
+      : tags;
+
+    const response = await axios.post(`${API_URL}/playlists`, {
+      name,
+      tags: tagsArray,
+      isPrivate
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  // Delete custom playlist
+  deletePlaylist: async (playlistId) => {
+    const token = await AsyncStorage.getItem('token');
+    const response = await axios.delete(`${API_URL}/playlists/${playlistId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  // Add song to playlist
+  addSongToPlaylist: async (playlistId, songId) => {
+    const token = await AsyncStorage.getItem('token');
+    const response = await axios.post(`${API_URL}/playlists/${playlistId}/songs`, {
+      songId
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  // Remove song from playlist
+  removeSongFromPlaylist: async (playlistId, songId) => {
+    const token = await AsyncStorage.getItem('token');
+    const response = await axios.delete(`${API_URL}/playlists/${playlistId}/songs/${songId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  // Toggle like song
+  toggleLikeSong: async (songId) => {
+    const token = await AsyncStorage.getItem('token');
+    const response = await axios.post(`${API_URL}/playlists/like/${songId}`, {}, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  // Check if song is liked
+  checkSongLiked: async (songId) => {
+    const token = await AsyncStorage.getItem('token');
+    const response = await axios.get(`${API_URL}/playlists/like/${songId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
     return response.data;
   },
 

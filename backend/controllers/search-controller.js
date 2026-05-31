@@ -4,9 +4,16 @@ const Music = require('../models/Music');
 /**
  * GET /api/search?q=song_title
  */
+const Playlist = require('../models/Playlist');
+
+/**
+ * GET /api/search?q=song_title&type=songs|playlists|both
+ */
 const searchMusic = async (req, res) => {
   try {
     const query = req.query.q;
+    const type = req.query.type; // 'songs', 'playlists', or 'both'
+
     if (!query || query.trim() === '') {
       return res.status(400).json({
         success: false,
@@ -17,62 +24,148 @@ const searchMusic = async (req, res) => {
     const cleanQuery = query.trim();
     const cleanQueryLower = cleanQuery.toLowerCase();
 
-    // 1. Search existing music in MongoDB first (case-insensitive title regex OR matching search query alias)
-    const results = await Music.find({
+    // 1. If searching ONLY public playlists
+    if (type === 'playlists') {
+      const playlists = await Playlist.find({
+        isPrivate: false,
+        $or: [
+          { name: { $regex: cleanQuery, $options: 'i' } },
+          { tags: { $regex: cleanQuery, $options: 'i' } }
+        ]
+      }).populate('songs').populate('user', 'username');
+
+      return res.status(200).json({
+        success: true,
+        downloading: false,
+        data: {
+          songs: [],
+          playlists
+        }
+      });
+    }
+
+    // 2. Fetch songs matching query
+    const songs = await Music.find({
       $or: [
         { title: { $regex: cleanQuery, $options: 'i' } },
         { searchQueries: cleanQueryLower }
       ]
     });
 
-    if (results.length > 0) {
-      return res.status(200).json({
-        success: true,
-        downloading: false,
-        data: results
-      });
+    let playlists = [];
+    if (type === 'both') {
+      playlists = await Playlist.find({
+        isPrivate: false,
+        $or: [
+          { name: { $regex: cleanQuery, $options: 'i' } },
+          { tags: { $regex: cleanQuery, $options: 'i' } }
+        ]
+      }).populate('songs').populate('user', 'username');
     }
 
-    // 2. If not found in DB, check if it is already in the download queue
+    // If songs are found in DB, return them
+    if (songs.length > 0) {
+      if (type === 'both' || type === 'songs') {
+        return res.status(200).json({
+          success: true,
+          downloading: false,
+          data: {
+            songs,
+            playlists
+          }
+        });
+      } else {
+        // Legacy direct array format
+        return res.status(200).json({
+          success: true,
+          downloading: false,
+          data: songs
+        });
+      }
+    }
+
+    // If no songs found in DB, check active download queue
     const activeState = downloadStates.get(cleanQueryLower);
 
     if (activeState) {
       if (activeState.status === 'failed') {
-        return res.status(200).json({
-          success: false,
-          downloading: false,
-          error: 'Song not available, please check again later!'
-        });
+        if (type === 'both' || type === 'songs') {
+          return res.status(200).json({
+            success: false,
+            downloading: false,
+            data: { songs: [], playlists },
+            error: 'Song not available, please check again later!'
+          });
+        } else {
+          return res.status(200).json({
+            success: false,
+            downloading: false,
+            error: 'Song not available, please check again later!'
+          });
+        }
       }
 
       if (activeState.status === 'success') {
-        // Immediately return the song if the download finished during polling
-        return res.status(200).json({
-          success: true,
-          downloading: false,
-          data: [activeState.data]
-        });
+        if (type === 'both' || type === 'songs') {
+          return res.status(200).json({
+            success: true,
+            downloading: false,
+            data: {
+              songs: [activeState.data],
+              playlists
+            }
+          });
+        } else {
+          return res.status(200).json({
+            success: true,
+            downloading: false,
+            data: [activeState.data]
+          });
+        }
       }
 
-      return res.status(200).json({
-        success: true,
-        downloading: true,
-        status: activeState.status,
-        progress: activeState.progress,
-        message: `Downloading "${cleanQuery}": ${activeState.status} (${activeState.progress}%)`
-      });
+      // Downloading in progress
+      if (type === 'both' || type === 'songs') {
+        return res.status(200).json({
+          success: true,
+          downloading: true,
+          status: activeState.status,
+          progress: activeState.progress,
+          data: { songs: [], playlists },
+          message: `Downloading "${cleanQuery}": ${activeState.status} (${activeState.progress}%)`
+        });
+      } else {
+        return res.status(200).json({
+          success: true,
+          downloading: true,
+          status: activeState.status,
+          progress: activeState.progress,
+          message: `Downloading "${cleanQuery}": ${activeState.status} (${activeState.progress}%)`
+        });
+      }
     }
 
-    // 3. Trigger download process asynchronously (run in background, don't wait)
+    // Trigger download process asynchronously
     downloadAndUpload(cleanQuery);
 
-    return res.status(202).json({
-      success: true,
-      downloading: true,
-      status: 'searching',
-      progress: 0,
-      message: `Searching the cloud and downloading "${cleanQuery}"... This will take a few moments.`
-    });
+    if (type === 'both' || type === 'songs') {
+      return res.status(202).json({
+        success: true,
+        downloading: true,
+        status: 'searching',
+        progress: 0,
+        data: { songs: [], playlists },
+        message: `Searching the cloud and downloading "${cleanQuery}"... This will take a few moments.`
+      });
+    } else {
+      return res.status(202).json({
+        success: true,
+        downloading: true,
+        status: 'searching',
+        progress: 0,
+        message: `Searching the cloud and downloading "${cleanQuery}"... This will take a few moments.`
+      });
+    }
 
   } catch (error) {
     console.error('❌ Search Controller Error:', error);

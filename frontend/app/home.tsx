@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ import Slider from '@react-native-community/slider';
 const { width } = Dimensions.get('window');
 const GRID_ITEM_WIDTH = (width - 30) / 2;
 
-type TabType = 'songs' | 'profile';
+type TabType = 'songs' | 'profile' | 'playlists';
 
 export default function HomeScreen() {
   const [musicList, setMusicList] = useState<Music[]>([]);
@@ -40,6 +40,20 @@ export default function HomeScreen() {
   const [allUsers, setAllUsers] = useState<{ _id: string; username: string; email: string; role: string }[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
 
+  // Playlists & Library States
+  const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
+  const [createPlaylistName, setCreatePlaylistName] = useState('');
+  const [createPlaylistTags, setCreatePlaylistTags] = useState('');
+  const [createPlaylistIsPrivate, setCreatePlaylistIsPrivate] = useState(true);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<any>(null);
+  const [showPlaylistDetailsModal, setShowPlaylistDetailsModal] = useState(false);
+
+  // Search type selector: songs vs playlists vs both
+  const [searchType, setSearchType] = useState<'songs' | 'playlists' | 'both'>('songs');
+  const [searchResultsPlaylists, setSearchResultsPlaylists] = useState<any[]>([]);
+
   // Consume audio playback controls and states from global context
   const { 
     currentlyPlaying, 
@@ -51,18 +65,38 @@ export default function HomeScreen() {
     position,
     duration,
     setMusicList: setContextMusicList,
-    addToQueue
+    addToQueue,
+    clearQueue
   } = useAudio();
 
   // Re-fetch the music list every time this screen comes into focus.
   // This ensures that after a trim (or any other mutation), the home screen
   // always reflects the latest data from the server without needing a full
   // app reload.
+  const fetchUserPlaylists = async () => {
+    try {
+      setLibraryLoading(true);
+      const res = await api.fetchPlaylists();
+      setUserPlaylists(res.data || []);
+      if (selectedPlaylist) {
+        const updatedPlaylist = res.data.find((p: any) => p._id === selectedPlaylist._id);
+        if (updatedPlaylist) {
+          setSelectedPlaylist(updatedPlaylist);
+        }
+      }
+    } catch (err) {
+      console.log('Error fetching user playlists:', err);
+    } finally {
+      setLibraryLoading(false);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       fetchMusic();
       loadUser();
-    }, [])
+      fetchUserPlaylists();
+    }, [selectedPlaylist?._id])
   );
 
   // Cleanup polling interval on unmount
@@ -84,13 +118,16 @@ export default function HomeScreen() {
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     handleCancelSearch();
+    if (tab === 'playlists') {
+      fetchUserPlaylists();
+    }
   };
 
   const startPolling = (query: string) => {
     const intervalId = setInterval(async () => {
       try {
         console.log(`⏳ Polling search for: "${query}"...`);
-        const response = await api.searchMusic(query);
+        const response = await api.searchMusic(query, searchType);
         if (response.success && !response.downloading) {
           console.log(`✅ Polling complete! Song downloaded.`);
           clearInterval(intervalId);
@@ -99,6 +136,10 @@ export default function HomeScreen() {
           setIsDownloading(false);
           setSearchLoading(false);
           setIsUnavailable(false);
+          
+          if (response.data && response.data.playlists) {
+            setSearchResultsPlaylists(response.data.playlists);
+          }
           
           // Refresh general library
           fetchMusic();
@@ -132,10 +173,15 @@ export default function HomeScreen() {
     setIsDownloading(false);
     setDownloadMessage('');
     setIsUnavailable(false);
+    setSearchResultsPlaylists([]);
     
     try {
-      const response = await api.searchMusic(searchQuery);
+      const response = await api.searchMusic(searchQuery, searchType);
       if (response.success) {
+        if (response.data && response.data.playlists) {
+          setSearchResultsPlaylists(response.data.playlists);
+        }
+        
         if (response.downloading) {
           setIsDownloading(true);
           setDownloadMessage(response.message || 'Downloading your song... Please wait.');
@@ -163,6 +209,7 @@ export default function HomeScreen() {
     setIsDownloading(false);
     setSearchLoading(false);
     setIsUnavailable(false);
+    setSearchResultsPlaylists([]);
     stopPolling();
   };
 
@@ -172,6 +219,8 @@ export default function HomeScreen() {
     setIsDownloading(false);
     setSearchLoading(false);
     setIsUnavailable(false);
+    setSearchResultsPlaylists([]);
+    setSearchType('songs');
     stopPolling();
   };
 
@@ -292,6 +341,69 @@ export default function HomeScreen() {
     }
   };
 
+  const handlePlayPlaylist = async (playlist: any) => {
+    if (!playlist.songs || playlist.songs.length === 0) {
+      Alert.alert('Empty Playlist', 'There are no songs in this playlist.');
+      return;
+    }
+    
+    clearQueue();
+    setContextMusicList(playlist.songs);
+    await play(playlist.songs[0]);
+    router.push('/player');
+    setShowPlaylistDetailsModal(false);
+  };
+
+  const handleRemoveSongFromPlaylist = async (songId: string) => {
+    if (!selectedPlaylist) return;
+    try {
+      const res = await api.removeSongFromPlaylist(selectedPlaylist._id, songId);
+      if (res.success) {
+        await fetchUserPlaylists();
+      } else {
+        Alert.alert('Error', res.message || 'Failed to remove song');
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || 'Failed to remove song';
+      Alert.alert('Error', errorMsg);
+    }
+  };
+
+  const handleDeletePlaylist = async () => {
+    if (!selectedPlaylist) return;
+    Alert.alert(
+      'Delete Playlist',
+      `Are you sure you want to delete "${selectedPlaylist.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await api.deletePlaylist(selectedPlaylist._id);
+              if (res.success) {
+                setShowPlaylistDetailsModal(false);
+                setSelectedPlaylist(null);
+                await fetchUserPlaylists();
+              } else {
+                Alert.alert('Error', res.message || 'Failed to delete playlist');
+              }
+            } catch (err: any) {
+              const errorMsg = err.response?.data?.message || 'Failed to delete playlist';
+              Alert.alert('Error', errorMsg);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleOpenPlaylistDetails = (playlist: any) => {
+    setSelectedPlaylist(playlist);
+    setShowPlaylistDetailsModal(true);
+  };
+
   // When clicking the row, load/play the song and open the full modal player
   const handleRowPress = async (item: Music) => {
     const filteredMusic = musicList.filter(song =>
@@ -374,13 +486,74 @@ export default function HomeScreen() {
 
   // --- SUB TAB RENDERS ---
 
+  const renderPlaylistSearchItem = ({ item }: { item: any }) => (
+    <TouchableOpacity 
+      style={styles.playlistRowItem} 
+      onPress={() => handleOpenPlaylistDetails(item)}
+    >
+      <View style={styles.playlistRowIcon}>
+        <Ionicons name="musical-notes" size={24} color="#8B5CF6" />
+      </View>
+      <View style={styles.playlistRowInfo}>
+        <Text style={styles.playlistRowName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.playlistRowMeta} numberOfLines={1}>
+          By {item.user?.username || 'Unknown'} • {item.songs?.length || 0} songs
+        </Text>
+        {item.tags && item.tags.length > 0 && (
+          <Text style={styles.playlistRowTags} numberOfLines={1}>
+            {item.tags.map((t: string) => `#${t}`).join(' ')}
+          </Text>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#7C7899" />
+    </TouchableOpacity>
+  );
+
+  const renderSearchPills = () => {
+    if (!isSearching) return null;
+    return (
+      <View style={styles.pillsContainer}>
+        <TouchableOpacity 
+          style={[styles.pill, searchType === 'songs' && styles.pillActive]} 
+          onPress={() => {
+            setSearchType('songs');
+            setSearchResultsPlaylists([]);
+          }}
+        >
+          <Text style={[styles.pillText, searchType === 'songs' && styles.pillTextActive]}>Songs</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.pill, searchType === 'playlists' && styles.pillActive]} 
+          onPress={() => {
+            setSearchType('playlists');
+            if (searchQuery.trim()) {
+              setTimeout(() => handleSearchSubmit(), 50);
+            }
+          }}
+        >
+          <Text style={[styles.pillText, searchType === 'playlists' && styles.pillTextActive]}>Playlists</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.pill, searchType === 'both' && styles.pillActive]} 
+          onPress={() => {
+            setSearchType('both');
+            if (searchQuery.trim()) {
+              setTimeout(() => handleSearchSubmit(), 50);
+            }
+          }}
+        >
+          <Text style={[styles.pillText, searchType === 'both' && styles.pillTextActive]}>Both</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderSongsTab = () => {
     const filteredMusic = musicList.filter(song =>
       song.title.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const displayList = isSearching && searchQuery.trim() !== '' ? filteredMusic : musicList;
-    const showEmptyState = isSearching && searchQuery.trim() !== '' && filteredMusic.length === 0;
 
     return (
       <View style={styles.tabContentContainer}>
@@ -393,7 +566,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
               <TextInput
                 style={styles.headerSearchInput}
-                placeholder="Search library..."
+                placeholder={searchType === 'songs' ? "Search or download songs..." : searchType === 'playlists' ? "Search playlists..." : "Search songs & playlists..."}
                 placeholderTextColor="#7C7899"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -415,52 +588,217 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {showEmptyState ? (
-          searchLoading || isDownloading ? (
-            <View style={styles.emptyContainer}>
-              <ActivityIndicator size="large" color="#8B5CF6" />
-              <Text style={styles.loadingStatusText}>
-                {isDownloading ? downloadMessage : 'Searching database...'}
-              </Text>
-            </View>
-          ) : isUnavailable ? (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="alert-circle-outline" size={60} color="#FF3B30" style={{ marginBottom: 15 }} />
-              <Text style={styles.emptyTextTitle}>Song not available</Text>
-              <Text style={styles.emptyTextSubtitle}>
-                "{searchQuery}" could not be downloaded from the cloud. Please check again later!
-              </Text>
-            </View>
+        {isSearching && searchQuery.trim() !== '' ? (
+          searchType === 'songs' ? (
+            <FlatList
+              key="songs-grid"
+              ListHeaderComponent={renderSearchPills()}
+              numColumns={2}
+              data={filteredMusic}
+              renderItem={renderMusicItem}
+              keyExtractor={(item) => item._id}
+              ListEmptyComponent={
+                searchLoading || isDownloading ? (
+                  <View style={styles.emptyContainer}>
+                    <ActivityIndicator size="large" color="#8B5CF6" />
+                    <Text style={styles.loadingStatusText}>
+                      {isDownloading ? downloadMessage : 'Searching database...'}
+                    </Text>
+                  </View>
+                ) : isUnavailable ? (
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="alert-circle-outline" size={60} color="#FF3B30" style={{ marginBottom: 15 }} />
+                    <Text style={styles.emptyTextTitle}>Song not available</Text>
+                    <Text style={styles.emptyTextSubtitle}>
+                      &quot;{searchQuery}&quot; could not be downloaded from the cloud.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="cloud-download-outline" size={60} color="#7C7899" style={{ marginBottom: 15 }} />
+                    <Text style={styles.emptyTextTitle}>Song not in library</Text>
+                    <Text style={styles.emptyTextSubtitle}>
+                      &quot;{searchQuery}&quot; is not in your library. Download it from the cloud?
+                    </Text>
+                    <TouchableOpacity style={styles.getSongButton} onPress={handleSearchSubmit}>
+                      <Ionicons name="download-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                      <Text style={styles.getSongButtonText}>Get the Song</Text>
+                    </TouchableOpacity>
+                  </View>
+                )
+              }
+              contentContainerStyle={[
+                styles.listContainer,
+                currentlyPlaying ? { paddingBottom: 160 } : { paddingBottom: 80 }
+              ]}
+              columnWrapperStyle={filteredMusic.length > 0 ? styles.gridRow : null}
+            />
+          ) : searchType === 'playlists' ? (
+            <FlatList
+              key="playlists-list"
+              ListHeaderComponent={renderSearchPills()}
+              numColumns={1}
+              data={searchResultsPlaylists}
+              renderItem={renderPlaylistSearchItem}
+              keyExtractor={(item) => item._id}
+              ListEmptyComponent={
+                searchLoading ? (
+                  <ActivityIndicator size="large" color="#8B5CF6" style={{ marginTop: 40 }} />
+                ) : (
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="folder-open-outline" size={60} color="#7C7899" style={{ marginBottom: 15 }} />
+                    <Text style={styles.emptyTextTitle}>No Playlists Found</Text>
+                    <Text style={styles.emptyTextSubtitle}>
+                      No public playlists match &quot;{searchQuery}&quot;.
+                    </Text>
+                  </View>
+                )
+              }
+              contentContainerStyle={[
+                styles.listContainer,
+                currentlyPlaying ? { paddingBottom: 160 } : { paddingBottom: 80 }
+              ]}
+            />
           ) : (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="cloud-download-outline" size={60} color="#7C7899" style={{ marginBottom: 15 }} />
-              <Text style={styles.emptyTextTitle}>Song not in library</Text>
-              <Text style={styles.emptyTextSubtitle}>
-                "{searchQuery}" is not available in your library. Would you like to get this song from the cloud?
-              </Text>
-              <TouchableOpacity style={styles.getSongButton} onPress={handleSearchSubmit}>
-                <Ionicons name="download-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.getSongButtonText}>Get the Song</Text>
-              </TouchableOpacity>
-            </View>
+            <FlatList
+              key="both-grid"
+              ListHeaderComponent={
+                <View>
+                  {renderSearchPills()}
+                  {filteredMusic.length > 0 && (
+                    <Text style={styles.sectionHeaderTitle}>Songs</Text>
+                  )}
+                </View>
+              }
+              numColumns={2}
+              data={filteredMusic}
+              renderItem={renderMusicItem}
+              keyExtractor={(item) => `song-${item._id}`}
+              columnWrapperStyle={filteredMusic.length > 0 ? styles.gridRow : null}
+              ListFooterComponent={
+                <View style={{ marginTop: 20 }}>
+                  {searchResultsPlaylists.length > 0 && (
+                    <Text style={styles.sectionHeaderTitle}>Playlists</Text>
+                  )}
+                  {searchResultsPlaylists.length > 0 ? (
+                    searchResultsPlaylists.map((p) => (
+                      <View key={`playlist-${p._id}`}>
+                        {renderPlaylistSearchItem({ item: p })}
+                      </View>
+                    ))
+                  ) : (
+                    filteredMusic.length === 0 && searchResultsPlaylists.length === 0 && !searchLoading && (
+                      <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>No matching songs or playlists found</Text>
+                      </View>
+                    )
+                  )}
+                  {searchLoading && searchResultsPlaylists.length === 0 && (
+                    <ActivityIndicator size="small" color="#8B5CF6" style={{ marginVertical: 20 }} />
+                  )}
+                </View>
+              }
+              contentContainerStyle={[
+                styles.listContainer,
+                currentlyPlaying ? { paddingBottom: 160 } : { paddingBottom: 80 }
+              ]}
+            />
           )
-        ) : displayList.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No music available</Text>
-          </View>
         ) : (
           <FlatList
-            key="grid"
+            key="general-grid"
             numColumns={2}
-            data={displayList}
+            data={musicList}
             renderItem={renderMusicItem}
             keyExtractor={(item) => item._id}
             extraData={{ currentlyPlaying, isPlaying }}
+            ListHeaderComponent={renderSearchPills()}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No music available</Text>
+              </View>
+            }
             contentContainerStyle={[
               styles.listContainer,
               currentlyPlaying ? { paddingBottom: 160 } : { paddingBottom: 80 }
             ]}
-            columnWrapperStyle={styles.gridRow}
+            columnWrapperStyle={musicList.length > 0 ? styles.gridRow : null}
+          />
+        )}
+      </View>
+    );
+  };
+
+  const renderPlaylistItem = ({ item }: { item: any }) => {
+    const songCount = item.songs?.length || 0;
+    return (
+      <TouchableOpacity 
+        style={styles.playlistCardItem}
+        onPress={() => handleOpenPlaylistDetails(item)}
+      >
+        <View style={[styles.playlistCardIcon, item.isDefault && styles.playlistCardIconDefault]}>
+          <Ionicons 
+            name={item.isDefault ? "heart" : "musical-notes"} 
+            size={28} 
+            color={item.isDefault ? "#FF3B30" : "#BDB4FF"} 
+          />
+        </View>
+        <View style={styles.playlistCardInfo}>
+          <Text style={styles.playlistCardName} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={styles.playlistCardSub}>
+            {item.isDefault ? 'Default Playlist' : (item.isPrivate ? 'Private' : 'Public')} • {songCount} {songCount === 1 ? 'song' : 'songs'}
+          </Text>
+          {item.tags && item.tags.length > 0 && (
+            <Text style={styles.playlistCardTags} numberOfLines={1}>
+              {item.tags.map((t: string) => `#${t}`).join(' ')}
+            </Text>
+          )}
+        </View>
+        <Ionicons name="chevron-forward-outline" size={18} color="#7C7899" />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderPlaylistsTab = () => {
+    return (
+      <View style={styles.tabContentContainer}>
+        {/* Library Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>My Library</Text>
+          <TouchableOpacity 
+            style={styles.createPlaylistHeaderBtn}
+            onPress={() => {
+              setCreatePlaylistName('');
+              setCreatePlaylistTags('');
+              setCreatePlaylistIsPrivate(true);
+              setShowCreatePlaylistModal(true);
+            }}
+          >
+            <Ionicons name="add" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {libraryLoading && userPlaylists.length === 0 ? (
+          <ActivityIndicator size="large" color="#8B5CF6" style={{ marginTop: 55 }} />
+        ) : userPlaylists.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="library-outline" size={60} color="#7C7899" style={{ marginBottom: 15 }} />
+            <Text style={styles.emptyTextTitle}>Create Playlists</Text>
+            <Text style={styles.emptyTextSubtitle}>
+              Organize your music by creating custom playlists!
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={userPlaylists}
+            renderItem={renderPlaylistItem}
+            keyExtractor={(item) => item._id}
+            contentContainerStyle={[
+              styles.listContainer,
+              currentlyPlaying ? { paddingBottom: 160 } : { paddingBottom: 80 }
+            ]}
           />
         )}
       </View>
@@ -617,6 +955,7 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* Tab Switcher Body */}
       {activeTab === 'songs' && renderSongsTab()}
+      {activeTab === 'playlists' && renderPlaylistsTab()}
       {activeTab === 'profile' && renderProfileTab()}
 
       {/* Floating Mini Player Bar (Above bottom tab bar) */}
@@ -699,6 +1038,20 @@ export default function HomeScreen() {
             Search
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.tabItem, activeTab === 'playlists' && styles.tabItemActive]}
+          onPress={() => handleTabChange('playlists')}
+        >
+          <Ionicons 
+            name={activeTab === 'playlists' ? 'library' : 'library-outline'} 
+            size={22} 
+            color={activeTab === 'playlists' ? '#BDB4FF' : '#7C7899'} 
+          />
+          <Text style={[styles.tabLabel, activeTab === 'playlists' && styles.tabLabelActive]}>
+            Library
+          </Text>
+        </TouchableOpacity>
  
         <TouchableOpacity 
           style={[styles.tabItem, activeTab === 'profile' && styles.tabItemActive]}
@@ -714,6 +1067,244 @@ export default function HomeScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Create Playlist Modal */}
+      <Modal
+        visible={showCreatePlaylistModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCreatePlaylistModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.playlistModalContainer}>
+            <Text style={styles.playlistModalTitle}>Create Playlist</Text>
+            
+            <TextInput
+              style={styles.playlistModalInput}
+              placeholder="Playlist Name"
+              placeholderTextColor="#7C7899"
+              value={createPlaylistName}
+              onChangeText={setCreatePlaylistName}
+              autoCapitalize="words"
+            />
+            
+            <TextInput
+              style={styles.playlistModalInput}
+              placeholder="Tags (comma separated, e.g. gym, chill)"
+              placeholderTextColor="#7C7899"
+              value={createPlaylistTags}
+              onChangeText={setCreatePlaylistTags}
+              autoCapitalize="none"
+            />
+            
+            <View style={styles.privacyContainer}>
+              <Text style={styles.privacyLabel}>Privacy:</Text>
+              <View style={styles.privacyButtons}>
+                <TouchableOpacity
+                  style={[styles.privacyBtn, createPlaylistIsPrivate && styles.privacyBtnActive]}
+                  onPress={() => setCreatePlaylistIsPrivate(true)}
+                >
+                  <Ionicons name="lock-closed" size={16} color={createPlaylistIsPrivate ? '#FFFFFF' : '#7C7899'} />
+                  <Text style={[styles.privacyBtnText, createPlaylistIsPrivate && styles.privacyBtnTextActive]}>Private</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.privacyBtn, !createPlaylistIsPrivate && styles.privacyBtnActive]}
+                  onPress={() => setCreatePlaylistIsPrivate(false)}
+                >
+                  <Ionicons name="globe" size={16} color={!createPlaylistIsPrivate ? '#FFFFFF' : '#7C7899'} />
+                  <Text style={[styles.privacyBtnText, !createPlaylistIsPrivate && styles.privacyBtnTextActive]}>Public</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <View style={styles.playlistModalActions}>
+              <TouchableOpacity
+                style={styles.playlistCancelBtn}
+                onPress={() => setShowCreatePlaylistModal(false)}
+              >
+                <Text style={styles.playlistCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.playlistCreateBtn}
+                onPress={async () => {
+                  if (!createPlaylistName.trim()) {
+                    Alert.alert('Error', 'Playlist name is required');
+                    return;
+                  }
+                  try {
+                    const res = await api.createPlaylist(
+                      createPlaylistName.trim(),
+                      createPlaylistTags.trim(),
+                      createPlaylistIsPrivate
+                    );
+                    if (res.success) {
+                      setShowCreatePlaylistModal(false);
+                      setCreatePlaylistName('');
+                      setCreatePlaylistTags('');
+                      setCreatePlaylistIsPrivate(true);
+                      await fetchUserPlaylists();
+                    } else {
+                      Alert.alert('Error', res.message || 'Failed to create playlist');
+                    }
+                  } catch (err: any) {
+                    const errorMsg = err.response?.data?.message || 'Failed to create playlist';
+                    Alert.alert('Error', errorMsg);
+                  }
+                }}
+              >
+                <Text style={styles.playlistCreateBtnText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Playlist Details Modal */}
+      <Modal
+        visible={showPlaylistDetailsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowPlaylistDetailsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.detailsModalContainer}>
+            {selectedPlaylist && (
+              <>
+                {/* Header */}
+                <View style={styles.detailsHeader}>
+                  <View style={styles.detailsTitleContainer}>
+                    <Text style={styles.detailsName} numberOfLines={1}>{selectedPlaylist.name}</Text>
+                    <Text style={styles.detailsMeta}>
+                      {selectedPlaylist.isDefault ? 'Default' : (selectedPlaylist.isPrivate ? 'Private' : 'Public')} • {selectedPlaylist.songs?.length || 0} songs
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setShowPlaylistDetailsModal(false)}>
+                    <Ionicons name="close" size={24} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Tags if any */}
+                {selectedPlaylist.tags && selectedPlaylist.tags.length > 0 && (
+                  <View style={styles.detailsTagsContainer}>
+                    {selectedPlaylist.tags.map((tag: string, index: number) => (
+                      <View key={index} style={styles.detailsTagBadge}>
+                        <Text style={styles.detailsTagText}>#{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Play and Delete Buttons Row */}
+                <View style={styles.detailsActionsRow}>
+                  {selectedPlaylist.songs && selectedPlaylist.songs.length > 0 ? (
+                    <TouchableOpacity
+                      style={styles.detailsPlayBtn}
+                      onPress={() => handlePlayPlaylist(selectedPlaylist)}
+                    >
+                      <Ionicons name="play" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.detailsPlayBtnText}>Play All</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.detailsPlayBtnDisabled}>
+                      <Text style={styles.detailsPlayBtnTextDisabled}>No Songs</Text>
+                    </View>
+                  )}
+
+                  {!selectedPlaylist.isDefault && (
+                    <TouchableOpacity
+                      style={styles.detailsDeletePlaylistBtn}
+                      onPress={handleDeletePlaylist}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#FF3B30" style={{ marginRight: 6 }} />
+                      <Text style={styles.detailsDeletePlaylistBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Song list */}
+                <FlatList
+                  data={selectedPlaylist.songs || []}
+                  keyExtractor={(item) => item._id}
+                  contentContainerStyle={{ paddingBottom: 20 }}
+                  style={{ width: '100%', flex: 1 }}
+                  renderItem={({ item }) => {
+                    const isPlayingCurrent = currentlyPlaying?._id === item._id && isPlaying;
+                    return (
+                      <View style={styles.detailsSongItem}>
+                        <TouchableOpacity
+                          style={styles.detailsSongClickable}
+                          onPress={async () => {
+                            if (currentlyPlaying?._id !== item._id) {
+                              await play(item);
+                            } else if (!isPlaying) {
+                              await resume();
+                            }
+                            router.push('/player');
+                            setShowPlaylistDetailsModal(false);
+                          }}
+                        >
+                          <View style={styles.detailsSongArt}>
+                            {item.imageUrl ? (
+                              <Image source={{ uri: item.imageUrl }} style={styles.detailsSongCover} />
+                            ) : (
+                              <Ionicons name="musical-note" size={18} color="#BDB4FF" />
+                            )}
+                          </View>
+                          <View style={styles.detailsSongInfo}>
+                            <Text style={[styles.detailsSongTitle, isPlayingCurrent && { color: '#8B5CF6' }]} numberOfLines={1}>
+                              {item.title}
+                            </Text>
+                            <Text style={styles.detailsSongSub}>⏱ {item.duration}</Text>
+                          </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.detailsSongRemoveBtn}
+                          onPress={() => {
+                            if (selectedPlaylist.isDefault) {
+                              Alert.alert(
+                                'Remove Liked Song',
+                                `Unlike "${item.title}"?`,
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  {
+                                    text: 'Remove',
+                                    style: 'destructive',
+                                    onPress: async () => {
+                                      try {
+                                        await api.toggleLikeSong(item._id);
+                                        await fetchUserPlaylists();
+                                      } catch (err) {
+                                        console.log('Error unliking song:', err);
+                                      }
+                                    }
+                                  }
+                                ]
+                              );
+                            } else {
+                              handleRemoveSongFromPlaylist(item._id);
+                            }
+                          }}
+                        >
+                          <Ionicons name="close-circle-outline" size={20} color="#FF3B30" />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }}
+                  ListEmptyComponent={
+                    <View style={styles.detailsEmptyContainer}>
+                      <Text style={styles.detailsEmptyText}>No songs in this playlist</Text>
+                      <Text style={styles.detailsEmptySub}>Add songs from the search or player menu</Text>
+                    </View>
+                  }
+                />
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1179,5 +1770,387 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  pillsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    marginVertical: 10,
+  },
+  pill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#1C1330',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  pillActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  pillText: {
+    color: '#7C7899',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  pillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginHorizontal: 10,
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  playlistRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1C1330',
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  playlistRowIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#251842',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  playlistRowInfo: {
+    flex: 1,
+  },
+  playlistRowName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  playlistRowMeta: {
+    fontSize: 13,
+    color: '#BDB4FF',
+    marginTop: 2,
+  },
+  playlistRowTags: {
+    fontSize: 11,
+    color: '#7C7899',
+    marginTop: 4,
+  },
+  createPlaylistHeaderBtn: {
+    padding: 4,
+  },
+  playlistCardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1C1330',
+    borderRadius: 12,
+    padding: 15,
+    marginHorizontal: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  playlistCardIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    backgroundColor: '#251842',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  playlistCardIconDefault: {
+    backgroundColor: '#251842',
+  },
+  playlistCardInfo: {
+    flex: 1,
+  },
+  playlistCardName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  playlistCardSub: {
+    fontSize: 13,
+    color: '#BDB4FF',
+    marginTop: 3,
+  },
+  playlistCardTags: {
+    fontSize: 11,
+    color: '#7C7899',
+    marginTop: 5,
+  },
+  playlistModalContainer: {
+    width: '85%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#332354',
+    alignItems: 'center',
+  },
+  playlistModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  playlistModalInput: {
+    width: '100%',
+    backgroundColor: '#130D22',
+    color: '#FFFFFF',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  privacyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 20,
+    paddingHorizontal: 5,
+  },
+  privacyLabel: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  privacyButtons: {
+    flexDirection: 'row',
+  },
+  privacyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#130D22',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  privacyBtnActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  privacyBtnText: {
+    color: '#7C7899',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  privacyBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  playlistModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  playlistCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginRight: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  playlistCancelBtnText: {
+    color: '#7C7899',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  playlistCreateBtn: {
+    flex: 1,
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginLeft: 10,
+    borderRadius: 8,
+  },
+  playlistCreateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  detailsModalContainer: {
+    width: '90%',
+    height: '80%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  detailsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    borderBottomWidth: 1,
+    borderBottomColor: '#332354',
+    paddingBottom: 12,
+  },
+  detailsTitleContainer: {
+    flex: 1,
+    marginRight: 10,
+  },
+  detailsName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  detailsMeta: {
+    fontSize: 13,
+    color: '#BDB4FF',
+    marginTop: 4,
+  },
+  detailsTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 10,
+  },
+  detailsTagBadge: {
+    backgroundColor: '#251842',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 6,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#332354',
+  },
+  detailsTagText: {
+    color: '#7C7899',
+    fontSize: 11,
+  },
+  detailsActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 15,
+  },
+  detailsPlayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  detailsPlayBtnDisabled: {
+    backgroundColor: '#130D22',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#332354',
+    justifyContent: 'center',
+  },
+  detailsPlayBtnText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  detailsPlayBtnTextDisabled: {
+    color: '#7C7899',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  detailsDeletePlaylistBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#251842',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FF3B30',
+  },
+  detailsDeletePlaylistBtnText: {
+    color: '#FF3B30',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  detailsSongItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#251842',
+  },
+  detailsSongClickable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  detailsSongArt: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: '#251842',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  detailsSongCover: {
+    width: '100%',
+    height: '100%',
+  },
+  detailsSongInfo: {
+    flex: 1,
+  },
+  detailsSongTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  detailsSongSub: {
+    fontSize: 12,
+    color: '#7C7899',
+    marginTop: 2,
+  },
+  detailsSongRemoveBtn: {
+    padding: 6,
+  },
+  detailsEmptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  detailsEmptyText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  detailsEmptySub: {
+    color: '#7C7899',
+    fontSize: 13,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
