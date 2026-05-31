@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, BackHandler } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -107,6 +107,21 @@ export default function HomeScreen() {
     };
   }, [pollingIntervalId]);
 
+  // Intercept hardware back button when a playlist is open
+  useEffect(() => {
+    const onBackPress = () => {
+      if (selectedPlaylist) {
+        setSelectedPlaylist(null);
+        return true; // prevent default behavior (app exit)
+      }
+      return false; // follow default behavior
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+    return () => backHandler.remove();
+  }, [selectedPlaylist]);
+
   const stopPolling = () => {
     if (pollingIntervalId) {
       clearInterval(pollingIntervalId);
@@ -117,6 +132,7 @@ export default function HomeScreen() {
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     handleCancelSearch();
+    setSelectedPlaylist(null);
     if (tab === 'playlists') {
       fetchUserPlaylists();
     }
@@ -487,15 +503,13 @@ export default function HomeScreen() {
     if (!selectedPlaylist) return null;
     return (
       <View style={styles.tabContentContainer}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setSelectedPlaylist(null)} style={styles.createPlaylistHeaderBtn}>
+        <View style={styles.headerPlaylistDetails}>
+          <TouchableOpacity onPress={() => setSelectedPlaylist(null)} style={styles.detailsBackBtn}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
+          <Text style={styles.headerTitleLeft} numberOfLines={1}>
             {selectedPlaylist.name}
           </Text>
-          <View style={{ width: 24 }} /> {/* placeholder to balance back button */}
         </View>
 
         <FlatList
@@ -522,7 +536,6 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Play and Delete Buttons Row */}
               <View style={styles.detailsActionsRow}>
                 {selectedPlaylist.songs && selectedPlaylist.songs.length > 0 ? (
                   <TouchableOpacity
@@ -575,17 +588,16 @@ export default function HomeScreen() {
                   </View>
                 </TouchableOpacity>
 
-                {/* Option button (ellipsis-vertical) */}
                 <TouchableOpacity
                   style={styles.detailsSongOptionsBtn}
                   onPress={() => {
                     Alert.alert(
-                      'Song Options',
-                      `Manage "${item.title}" in this playlist`,
+                      'Remove Song',
+                      `Are you sure you want to remove "${item.title}" from this playlist?`,
                       [
                         { text: 'Cancel', style: 'cancel' },
                         {
-                          text: 'Remove from Playlist',
+                          text: 'Remove',
                           style: 'destructive',
                           onPress: async () => {
                             if (selectedPlaylist.isDefault) {
@@ -1167,6 +1179,7 @@ export default function HomeScreen() {
           onPress={() => {
             setActiveTab('songs');
             setIsSearching(true);
+            setSelectedPlaylist(null);
           }}
         >
           <Ionicons 
@@ -2171,5 +2184,23 @@ const styles = StyleSheet.create({
     padding: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#251842',
+  },
+  headerPlaylistDetails: {
+    backgroundColor: '#1C1330',
+    padding: 20,
+    paddingTop: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#332354',
+  },
+  detailsBackBtn: {
+    marginRight: 15,
+  },
+  headerTitleLeft: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    flex: 1,
   },
 });

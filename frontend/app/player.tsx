@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, Image, Platform, Modal, TextInput, Alert, ActivityIndicator, FlatList } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, Image, Platform, Modal, TextInput, Alert, ActivityIndicator, FlatList, Animated } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
@@ -12,6 +12,70 @@ import { api } from '../src/services/api';
 
 const { width } = Dimensions.get('window');
 const ALBUM_ART_SIZE = width * 0.75;
+
+const MarqueeText = ({ text, style }: { text: string; style: any }) => {
+  const animatedValue = useRef(new Animated.Value(0)).current;
+  const [textWidth, setTextWidth] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  useEffect(() => {
+    animatedValue.setValue(0);
+    if (textWidth > containerWidth && containerWidth > 0) {
+      const scrollRange = textWidth - containerWidth + 30; // 30px padding at end
+      const duration = scrollRange * 40; // 40ms per pixel scroll speed
+      
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.delay(2000),
+          Animated.timing(animatedValue, {
+            toValue: -scrollRange,
+            duration: duration,
+            useNativeDriver: true,
+          }),
+          Animated.delay(2000),
+          Animated.timing(animatedValue, {
+            toValue: 0,
+            duration: duration,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [text, textWidth, containerWidth]);
+
+  const isScrollable = textWidth > containerWidth && containerWidth > 0;
+
+  return (
+    <View 
+      style={{ 
+        width: '100%', 
+        overflow: 'hidden',
+        alignItems: isScrollable ? 'flex-start' : 'center',
+        justifyContent: 'center',
+      }}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+    >
+      <Animated.View
+        style={{
+          flexDirection: 'row',
+          transform: [{ translateX: animatedValue }],
+          width: isScrollable ? textWidth : '100%',
+          justifyContent: isScrollable ? 'flex-start' : 'center',
+        }}
+      >
+        <Text
+          style={[style, { width: 'auto', textAlign: isScrollable ? 'left' : 'center' }]}
+          numberOfLines={1}
+          onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}
+        >
+          {text}
+        </Text>
+      </Animated.View>
+    </View>
+  );
+};
 
 export default function PlayerScreen() {
   const { 
@@ -241,7 +305,7 @@ export default function PlayerScreen() {
         {/* Song Info */}
         <View style={styles.songInfoRow}>
           <View style={styles.infoTextContainer}>
-            <Text style={styles.songTitle} numberOfLines={1}>{currentlyPlaying.title}</Text>
+            <MarqueeText text={currentlyPlaying.title} style={styles.songTitle} />
             <Text style={styles.artistName}>Musiana Library</Text>
           </View>
           <TouchableOpacity onPress={handleToggleLike} style={styles.heartButton}>
