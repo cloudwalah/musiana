@@ -44,6 +44,7 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
     <View 
       style={{ 
         width: '100%', 
+        alignSelf: 'stretch',
         overflow: 'hidden',
         alignItems: isScrollable ? 'flex-start' : 'center',
         justifyContent: 'center',

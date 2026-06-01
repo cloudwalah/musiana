@@ -42,6 +42,7 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
     <View
       style={{
         width: '100%',
+        alignSelf: 'stretch',
         overflow: 'hidden',
         alignItems: isScrollable ? 'flex-start' : 'center',
         justifyContent: 'center',
@@ -896,15 +897,15 @@ export default function HomeScreen() {
               ) : null}
             </View>
           ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <>
+              <Text style={styles.headerTitle}>Musiana</Text>
               <TouchableOpacity 
-                style={styles.headerProfileCircle}
+                style={styles.headerProfileSquare}
                 onPress={() => handleTabChange('profile')}
               >
                 <Ionicons name="person" size={16} color="#BDB4FF" />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>Musiana</Text>
-            </View>
+            </>
           )}
         </View>
 
@@ -1157,26 +1158,26 @@ export default function HomeScreen() {
       <View style={styles.tabContentContainer}>
         {/* Library Header */}
         <View style={styles.header}>
+          <Text style={styles.headerTitle}>My Library</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity 
-              style={styles.headerProfileCircle}
+              style={styles.createPlaylistHeaderBtn}
+              onPress={() => {
+                setCreatePlaylistName('');
+                setCreatePlaylistTags('');
+                setCreatePlaylistIsPrivate(true);
+                setShowCreatePlaylistModal(true);
+              }}
+            >
+              <Ionicons name="add" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.headerProfileSquare, { marginLeft: 12 }]}
               onPress={() => handleTabChange('profile')}
             >
               <Ionicons name="person" size={16} color="#BDB4FF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>My Library</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.createPlaylistHeaderBtn}
-            onPress={() => {
-              setCreatePlaylistName('');
-              setCreatePlaylistTags('');
-              setCreatePlaylistIsPrivate(true);
-              setShowCreatePlaylistModal(true);
-            }}
-          >
-            <Ionicons name="add" size={28} color="#FFFFFF" />
-          </TouchableOpacity>
         </View>
 
         {libraryLoading && userPlaylists.length === 0 ? (
@@ -1209,12 +1210,7 @@ export default function HomeScreen() {
       <View style={styles.tabContentContainer}>
         {/* Profile Header */}
         <View style={styles.header}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={styles.headerProfileCircle}>
-              <Ionicons name="person" size={16} color="#BDB4FF" />
-            </View>
-            <Text style={styles.headerTitle}>User Profile</Text>
-          </View>
+          <Text style={styles.headerTitle}>Profile</Text>
           <TouchableOpacity
             style={styles.profileHeaderLogoutBtn}
             onPress={() => setShowLogoutModal(true)}
@@ -2800,14 +2796,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
   },
-  headerProfileCircle: {
+  headerProfileSquare: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 8,
     backgroundColor: '#251842',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
     borderWidth: 1,
     borderColor: '#332354',
   },
