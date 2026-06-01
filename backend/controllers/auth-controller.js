@@ -234,6 +234,13 @@ const promoteUserToAdmin = async (req, res) => {
 
 const demoteAdminToUser = async (req, res) => {
     try {
+        if (!req.userInfo || req.userInfo.role !== 'super-admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied: Only super-admin can demote admins'
+            });
+        }
+
         const { id } = req.params;
         const user = await User.findById(id);
         if (!user) {

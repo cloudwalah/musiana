@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { View, TextInput, Text, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
+import { View, TextInput, Text, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, ScrollView, Platform, Modal, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/services/api';
 
@@ -12,25 +12,40 @@ export default function ForgotPasswordScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Custom feedback modal states
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackTitle, setFeedbackTitle] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackIsError, setFeedbackIsError] = useState(false);
+
+  const showFeedback = (title: string, message: string, isError = false) => {
+    setFeedbackTitle(title);
+    setFeedbackMessage(message);
+    setFeedbackIsError(isError);
+    setShowFeedbackModal(true);
+  };
+
   const handleReset = async () => {
     if (!username || !email || !newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill all fields');
+      showFeedback('Error', 'Please fill all fields', true);
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      showFeedback('Error', 'New passwords do not match', true);
       return;
     }
 
     setLoading(true);
     try {
       const response = await api.forgotPassword(username, email, newPassword);
-      Alert.alert('Success', response.message || 'Password reset successful!');
-      router.back();
+      showFeedback('Success', response.message || 'Password reset successful!');
+      setTimeout(() => {
+        router.back();
+      }, 1500);
     } catch (error: any) {
       console.log('❌ Password Reset Error:', error);
-      Alert.alert('Reset Failed', error.response?.data?.message || 'Password reset failed');
+      showFeedback('Reset Failed', error.response?.data?.message || 'Password reset failed', true);
     } finally {
       setLoading(false);
     }
@@ -116,6 +131,39 @@ export default function ForgotPasswordScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.link}>Back to Login</Text>
         </TouchableOpacity>
+
+        {/* Custom Feedback Modal */}
+        <Modal
+          visible={showFeedbackModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowFeedbackModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowFeedbackModal(false)}
+          >
+            <TouchableWithoutFeedback>
+              <View style={styles.feedbackModalContainer}>
+                <Ionicons
+                  name={feedbackIsError ? 'alert-circle' : 'checkmark-circle'}
+                  size={48}
+                  color={feedbackIsError ? '#FF3B30' : '#34C759'}
+                  style={{ marginBottom: 12 }}
+                />
+                <Text style={styles.feedbackModalTitle}>{feedbackTitle}</Text>
+                <Text style={styles.feedbackModalMessage}>{feedbackMessage}</Text>
+                <TouchableOpacity
+                  style={[styles.feedbackModalBtn, feedbackIsError && { backgroundColor: '#FF3B30' }]}
+                  onPress={() => setShowFeedbackModal(false)}
+                >
+                  <Text style={styles.feedbackModalBtnText}>OK</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </TouchableOpacity>
+        </Modal>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -202,5 +250,46 @@ const styles = StyleSheet.create({
     marginTop: 24,
     fontSize: 14,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  feedbackModalContainer: {
+    width: '80%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#332354',
+    alignItems: 'center',
+  },
+  feedbackModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  feedbackModalMessage: {
+    fontSize: 14,
+    color: '#BDB4FF',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  feedbackModalBtn: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+  },
+  feedbackModalBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });

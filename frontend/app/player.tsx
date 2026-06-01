@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, Image, Platform, Modal, TextInput, Alert, ActivityIndicator, FlatList, Animated, Easing, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, Image, Platform, Modal, TextInput, Alert, ActivityIndicator, FlatList, Animated, Easing, TouchableWithoutFeedback, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
@@ -51,14 +51,22 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
       }}
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
-      {/* Hidden text to measure actual untruncated width */}
-      <Text
-        style={[style, { position: 'absolute', opacity: 0, width: 'auto' }]}
-        numberOfLines={1}
-        onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}
-      >
-        {text}
-      </Text>
+      {/* Hidden container to measure actual untruncated text width */}
+      <View style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <Text
+            style={[style, { width: 'auto' }]}
+            numberOfLines={1}
+            onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              console.log("📏 Player Screen: Measured unconstrained text width:", w);
+              setTextWidth(w);
+            }}
+          >
+            {text}
+          </Text>
+        </ScrollView>
+      </View>
 
       <Animated.View
         style={{
@@ -373,7 +381,6 @@ export default function PlayerScreen() {
         <View style={styles.songInfoRow}>
           <View style={styles.infoTextContainer}>
             <MarqueeText text={currentlyPlaying.title} style={styles.songTitle} />
-            <Text style={styles.artistName}>Musiana Library</Text>
           </View>
           <TouchableOpacity onPress={handleToggleLike} style={styles.heartButton}>
             <Ionicons 
@@ -1251,7 +1258,7 @@ const styles = StyleSheet.create({
   },
   infoTextContainer: {
     flex: 1,
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
     marginRight: 10,
   },
   heartButton: {

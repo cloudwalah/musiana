@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { View, TextInput, Text, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
+import { View, TextInput, Text, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, ScrollView, Platform, Modal, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/services/api';
 
@@ -12,18 +12,31 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Custom feedback modal states
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackTitle, setFeedbackTitle] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackIsError, setFeedbackIsError] = useState(false);
+
+  const showFeedback = (title: string, message: string, isError = false) => {
+    setFeedbackTitle(title);
+    setFeedbackMessage(message);
+    setFeedbackIsError(isError);
+    setShowFeedbackModal(true);
+  };
+
   const handleRegister = async () => {
     console.log('🔵 Register button pressed');
     
     if (!userName || !email || !password || !confirmPassword) {
       console.log('❌ Validation failed - missing fields');
-      Alert.alert('Error', 'Please fill all fields');
+      showFeedback('Error', 'Please fill all fields', true);
       return;
     }
 
     if (password !== confirmPassword) {
       console.log('❌ Validation failed - passwords mismatch');
-      Alert.alert('Error', 'Passwords do not match');
+      showFeedback('Error', 'Passwords do not match', true);
       return;
     }
 
@@ -35,15 +48,17 @@ export default function RegisterScreen() {
     try {
       const result = await api.register(userName, email, password);
       console.log('✅ Registration successful:', result);
-      Alert.alert('Success', 'Registration successful! Please login.');
-      router.back();
+      showFeedback('Success', 'Registration successful! Please login.');
+      setTimeout(() => {
+        router.back();
+      }, 1500);
     } catch (error: any) {
       console.log('❌ Registration Error:', error);
       
       const errorMessage = error.response?.data?.message 
         || error.message 
         || 'Registration failed. Check if backend is running.';
-      Alert.alert('Registration Failed', errorMessage);
+      showFeedback('Registration Failed', errorMessage, true);
     } finally {
       setLoading(false);
       console.log('🔵 Loading finished');
@@ -129,6 +144,39 @@ export default function RegisterScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.link}>Already have an account? Login</Text>
         </TouchableOpacity>
+
+        {/* Custom Feedback Modal */}
+        <Modal
+          visible={showFeedbackModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowFeedbackModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowFeedbackModal(false)}
+          >
+            <TouchableWithoutFeedback>
+              <View style={styles.feedbackModalContainer}>
+                <Ionicons
+                  name={feedbackIsError ? 'alert-circle' : 'checkmark-circle'}
+                  size={48}
+                  color={feedbackIsError ? '#FF3B30' : '#34C759'}
+                  style={{ marginBottom: 12 }}
+                />
+                <Text style={styles.feedbackModalTitle}>{feedbackTitle}</Text>
+                <Text style={styles.feedbackModalMessage}>{feedbackMessage}</Text>
+                <TouchableOpacity
+                  style={[styles.feedbackModalBtn, feedbackIsError && { backgroundColor: '#FF3B30' }]}
+                  onPress={() => setShowFeedbackModal(false)}
+                >
+                  <Text style={styles.feedbackModalBtnText}>OK</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </TouchableOpacity>
+        </Modal>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -215,5 +263,46 @@ const styles = StyleSheet.create({
     marginTop: 24,
     fontSize: 14,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  feedbackModalContainer: {
+    width: '80%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#332354',
+    alignItems: 'center',
+  },
+  feedbackModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  feedbackModalMessage: {
+    fontSize: 14,
+    color: '#BDB4FF',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  feedbackModalBtn: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+  },
+  feedbackModalBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });

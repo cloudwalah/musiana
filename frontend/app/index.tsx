@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, Text, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, ScrollView, Platform, ActivityIndicator } from 'react-native';
+import { View, TextInput, Text, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, ScrollView, Platform, ActivityIndicator, Modal, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/services/api';
 
@@ -10,6 +10,19 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // Custom feedback modal states
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackTitle, setFeedbackTitle] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackIsError, setFeedbackIsError] = useState(false);
+
+  const showFeedback = (title: string, message: string, isError = false) => {
+    setFeedbackTitle(title);
+    setFeedbackMessage(message);
+    setFeedbackIsError(isError);
+    setShowFeedbackModal(true);
+  };
 
   useEffect(() => {
     checkExistingAuth();
@@ -33,7 +46,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!username || !password) {
-      Alert.alert('Error', 'Please fill all fields');
+      showFeedback('Error', 'Please fill all fields', true);
       return;
     }
 
@@ -57,7 +70,7 @@ export default function LoginScreen() {
       
     } catch (error: any) {
       console.log('❌ Login Error:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Login failed');
+      showFeedback('Error', error.response?.data?.message || 'Login failed', true);
     } finally {
       setLoading(false);
     }
@@ -137,6 +150,39 @@ export default function LoginScreen() {
         <TouchableOpacity onPress={() => router.push('/register')}>
           <Text style={styles.link}>Don&apos;t have an account? Register</Text>
         </TouchableOpacity>
+
+        {/* Custom Feedback Modal */}
+        <Modal
+          visible={showFeedbackModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowFeedbackModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowFeedbackModal(false)}
+          >
+            <TouchableWithoutFeedback>
+              <View style={styles.feedbackModalContainer}>
+                <Ionicons
+                  name={feedbackIsError ? 'alert-circle' : 'checkmark-circle'}
+                  size={48}
+                  color={feedbackIsError ? '#FF3B30' : '#34C759'}
+                  style={{ marginBottom: 12 }}
+                />
+                <Text style={styles.feedbackModalTitle}>{feedbackTitle}</Text>
+                <Text style={styles.feedbackModalMessage}>{feedbackMessage}</Text>
+                <TouchableOpacity
+                  style={[styles.feedbackModalBtn, feedbackIsError && { backgroundColor: '#FF3B30' }]}
+                  onPress={() => setShowFeedbackModal(false)}
+                >
+                  <Text style={styles.feedbackModalBtnText}>OK</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </TouchableOpacity>
+        </Modal>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -232,5 +278,46 @@ const styles = StyleSheet.create({
     marginTop: 24,
     fontSize: 14,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  feedbackModalContainer: {
+    width: '80%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#332354',
+    alignItems: 'center',
+  },
+  feedbackModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  feedbackModalMessage: {
+    fontSize: 14,
+    color: '#BDB4FF',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  feedbackModalBtn: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+  },
+  feedbackModalBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });

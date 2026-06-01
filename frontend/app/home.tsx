@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, BackHandler, TouchableWithoutFeedback, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, BackHandler, TouchableWithoutFeedback, Animated, Easing, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,14 +49,22 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
       }}
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
-      {/* Hidden text to measure actual untruncated width */}
-      <Text
-        style={[style, { position: 'absolute', opacity: 0, width: 'auto' }]}
-        numberOfLines={1}
-        onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}
-      >
-        {text}
-      </Text>
+      {/* Hidden container to measure actual untruncated text width */}
+      <View style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <Text
+            style={[style, { width: 'auto' }]}
+            numberOfLines={1}
+            onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              console.log("📏 Home Screen: Measured unconstrained text width:", w);
+              setTextWidth(w);
+            }}
+          >
+            {text}
+          </Text>
+        </ScrollView>
+      </View>
 
       <Animated.View
         style={{
@@ -142,6 +150,25 @@ export default function HomeScreen() {
 
   // Logout confirmation modal
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  // Custom feedback modal states
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackTitle, setFeedbackTitle] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackIsError, setFeedbackIsError] = useState(false);
+
+  // Promote / Demote confirmation modal states
+  const [showPromoteConfirmModal, setShowPromoteConfirmModal] = useState(false);
+  const [showDemoteConfirmModal, setShowDemoteConfirmModal] = useState(false);
+  const [userToPromote, setUserToPromote] = useState<{ id: string; username: string } | null>(null);
+  const [userToDemote, setUserToDemote] = useState<{ id: string; username: string } | null>(null);
+
+  const showFeedback = (title: string, message: string, isError = false) => {
+    setFeedbackTitle(title);
+    setFeedbackMessage(message);
+    setFeedbackIsError(isError);
+    setShowFeedbackModal(true);
+  };
 
   // Search type selector: songs vs playlists vs both
   const [searchType, setSearchType] = useState<'songs' | 'playlists' | 'both'>('songs');
@@ -360,64 +387,56 @@ export default function HomeScreen() {
     }
   };
 
-  const handlePromoteToAdmin = async (userId: string, targetUsername: string) => {
-    Alert.alert(
-      'Promote User',
-      `Are you sure you want to promote "${targetUsername}" to Admin?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Promote', 
-          style: 'default',
-          onPress: async () => {
-            try {
-              const response = await api.promoteUser(userId);
-              if (response.success) {
-                Alert.alert('Success', `"${targetUsername}" promoted to admin successfully!`);
-                // Refresh list
-                const usersResponse = await api.getAllUsers();
-                if (usersResponse.success) {
-                  setAllUsers(usersResponse.data || []);
-                }
-              }
-            } catch (err: any) {
-              console.log('Promote error:', err);
-              Alert.alert('Error', err.response?.data?.message || 'Failed to promote user');
-            }
-          }
-        }
-      ]
-    );
+  const handlePromoteToAdmin = (userId: string, targetUsername: string) => {
+    setUserToPromote({ id: userId, username: targetUsername });
+    setShowPromoteConfirmModal(true);
   };
 
-  const handleDemoteToUser = async (userId: string, targetUsername: string) => {
-    Alert.alert(
-      'Demote Admin',
-      `Are you sure you want to demote "${targetUsername}" to a regular User?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Demote', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await api.demoteUser(userId);
-              if (response.success) {
-                Alert.alert('Success', `"${targetUsername}" demoted to user successfully!`);
-                // Refresh list
-                const usersResponse = await api.getAllUsers();
-                if (usersResponse.success) {
-                  setAllUsers(usersResponse.data || []);
-                }
-              }
-            } catch (err: any) {
-              console.log('Demote error:', err);
-              Alert.alert('Error', err.response?.data?.message || 'Failed to demote user');
-            }
-          }
+  const handleConfirmPromote = async () => {
+    if (!userToPromote) return;
+    setShowPromoteConfirmModal(false);
+    try {
+      const response = await api.promoteUser(userToPromote.id);
+      if (response.success) {
+        showFeedback('Success', `"${userToPromote.username}" promoted to admin successfully!`);
+        // Refresh list
+        const usersResponse = await api.getAllUsers();
+        if (usersResponse.success) {
+          setAllUsers(usersResponse.data || []);
         }
-      ]
-    );
+      }
+    } catch (err: any) {
+      console.log('Promote error:', err);
+      showFeedback('Error', err.response?.data?.message || 'Failed to promote user', true);
+    } finally {
+      setUserToPromote(null);
+    }
+  };
+
+  const handleDemoteToUser = (userId: string, targetUsername: string) => {
+    setUserToDemote({ id: userId, username: targetUsername });
+    setShowDemoteConfirmModal(true);
+  };
+
+  const handleConfirmDemote = async () => {
+    if (!userToDemote) return;
+    setShowDemoteConfirmModal(false);
+    try {
+      const response = await api.demoteUser(userToDemote.id);
+      if (response.success) {
+        showFeedback('Success', `"${userToDemote.username}" demoted to user successfully!`);
+        // Refresh list
+        const usersResponse = await api.getAllUsers();
+        if (usersResponse.success) {
+          setAllUsers(usersResponse.data || []);
+        }
+      }
+    } catch (err: any) {
+      console.log('Demote error:', err);
+      showFeedback('Error', err.response?.data?.message || 'Failed to demote user', true);
+    } finally {
+      setUserToDemote(null);
+    }
   };
 
   const fetchMusic = async () => {
@@ -425,7 +444,7 @@ export default function HomeScreen() {
       const token = await api.getToken();
       
       if (!token) {
-        Alert.alert('Error', 'Please login first');
+        showFeedback('Error', 'Please login first', true);
         router.replace('/');
         return;
       }
@@ -437,7 +456,7 @@ export default function HomeScreen() {
       
     } catch (error: any) {
       console.log('❌ Fetch error:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to fetch music');
+      showFeedback('Error', error.response?.data?.message || 'Failed to fetch music', true);
       
       // If unauthorized, redirect to login
       if (error.response?.status === 401) {
@@ -461,25 +480,25 @@ export default function HomeScreen() {
 
   const handleChangePassword = async () => {
     if (!oldPassword || !newPassword || !confirmNewPassword) {
-      Alert.alert('Error', 'Please fill all password fields');
+      showFeedback('Error', 'Please fill all password fields', true);
       return;
     }
 
     if (newPassword !== confirmNewPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      showFeedback('Error', 'New passwords do not match', true);
       return;
     }
 
     setUpdatingPassword(true);
     try {
       const response = await api.changePassword(oldPassword, newPassword);
-      Alert.alert('Success', response.message || 'Password changed successfully!');
+      showFeedback('Success', response.message || 'Password changed successfully!');
       setOldPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
     } catch (error: any) {
       console.log('❌ Change Password Error:', error);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to change password');
+      showFeedback('Error', error.response?.data?.message || 'Failed to change password', true);
     } finally {
       setUpdatingPassword(false);
     }
@@ -487,7 +506,7 @@ export default function HomeScreen() {
 
   const handlePlayPlaylist = async (playlist: any) => {
     if (!playlist.songs || playlist.songs.length === 0) {
-      Alert.alert('Empty Playlist', 'There are no songs in this playlist.');
+      showFeedback('Empty Playlist', 'There are no songs in this playlist.', true);
       return;
     }
     
@@ -516,7 +535,7 @@ export default function HomeScreen() {
       await fetchUserPlaylists();
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || 'Failed to remove song';
-      Alert.alert('Error', errorMsg);
+      showFeedback('Error', errorMsg, true);
     }
   };
 
@@ -532,11 +551,11 @@ export default function HomeScreen() {
         setPlaylistToDelete(null);
         await fetchUserPlaylists(false);
       } else {
-        Alert.alert('Error', res.message || 'Failed to delete playlist');
+        showFeedback('Error', res.message || 'Failed to delete playlist', true);
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || 'Failed to delete playlist';
-      Alert.alert('Error', errorMsg);
+      showFeedback('Error', errorMsg, true);
     }
   };
 
@@ -553,11 +572,11 @@ export default function HomeScreen() {
         setPlaylistToUpdate(null);
         await fetchUserPlaylists(false);
       } else {
-        Alert.alert('Error', res.message || 'Failed to update visibility');
+        showFeedback('Error', res.message || 'Failed to update visibility', true);
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || 'Failed to update visibility';
-      Alert.alert('Error', errorMsg);
+      showFeedback('Error', errorMsg, true);
     }
   };
 
@@ -1362,12 +1381,14 @@ export default function HomeScreen() {
                         </View>
                         {u.username !== user?.username && u.role !== 'super-admin' && (
                           u.role === 'admin' ? (
-                            <TouchableOpacity 
-                              style={[styles.promoteButton, { backgroundColor: '#FF3B30' }]}
-                              onPress={() => handleDemoteToUser(u._id, u.username)}
-                            >
-                              <Text style={styles.promoteButtonText}>Demote</Text>
-                            </TouchableOpacity>
+                            user?.role === 'super-admin' ? (
+                              <TouchableOpacity 
+                                style={[styles.promoteButton, { backgroundColor: '#FF3B30' }]}
+                                onPress={() => handleDemoteToUser(u._id, u.username)}
+                              >
+                                <Text style={styles.promoteButtonText}>Demote</Text>
+                              </TouchableOpacity>
+                            ) : null
                           ) : (
                             <TouchableOpacity 
                               style={styles.promoteButton}
@@ -1776,7 +1797,7 @@ export default function HomeScreen() {
                   style={styles.playlistCreateBtn}
                   onPress={async () => {
                     if (!createPlaylistName.trim()) {
-                      Alert.alert('Error', 'Playlist name is required');
+                      showFeedback('Error', 'Playlist name is required', true);
                       return;
                     }
                     try {
@@ -1792,11 +1813,11 @@ export default function HomeScreen() {
                         setCreatePlaylistIsPrivate(true);
                         await fetchUserPlaylists();
                       } else {
-                        Alert.alert('Error', res.message || 'Failed to create playlist');
+                        showFeedback('Error', res.message || 'Failed to create playlist', true);
                       }
                     } catch (err: any) {
                       const errorMsg = err.response?.data?.message || 'Failed to create playlist';
-                      Alert.alert('Error', errorMsg);
+                      showFeedback('Error', errorMsg, true);
                     }
                   }}
                 >
@@ -1808,7 +1829,134 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Promote User Confirmation Modal */}
+      <Modal
+        visible={showPromoteConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowPromoteConfirmModal(false);
+          setUserToPromote(null);
+        }}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => {
+            setShowPromoteConfirmModal(false);
+            setUserToPromote(null);
+          }}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              <Text style={styles.confirmModalTitle}>Promote User</Text>
+              {userToPromote && (
+                <Text style={styles.confirmModalSub}>
+                  Are you sure you want to promote <Text style={{ fontWeight: 'bold' }}>{userToPromote.username}</Text> to Admin?
+                </Text>
+              )}
+              <View style={styles.confirmActionRow}>
+                <TouchableOpacity 
+                  style={styles.confirmCancelBtn}
+                  onPress={() => {
+                    setShowPromoteConfirmModal(false);
+                    setUserToPromote(null);
+                  }}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.confirmSaveBtn, { backgroundColor: '#8B5CF6' }]}
+                  onPress={handleConfirmPromote}
+                >
+                  <Text style={styles.confirmSaveText}>Promote</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
 
+      {/* Demote User Confirmation Modal */}
+      <Modal
+        visible={showDemoteConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowDemoteConfirmModal(false);
+          setUserToDemote(null);
+        }}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => {
+            setShowDemoteConfirmModal(false);
+            setUserToDemote(null);
+          }}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              <Text style={styles.confirmModalTitle}>Demote Admin</Text>
+              {userToDemote && (
+                <Text style={styles.confirmModalSub}>
+                  Are you sure you want to demote <Text style={{ fontWeight: 'bold' }}>{userToDemote.username}</Text> to a regular User?
+                </Text>
+              )}
+              <View style={styles.confirmActionRow}>
+                <TouchableOpacity 
+                  style={styles.confirmCancelBtn}
+                  onPress={() => {
+                    setShowDemoteConfirmModal(false);
+                    setUserToDemote(null);
+                  }}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.confirmSaveBtn}
+                  onPress={handleConfirmDemote}
+                >
+                  <Text style={styles.confirmSaveText}>Demote</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Custom Feedback Modal (replaces Alert.alert) */}
+      <Modal
+        visible={showFeedbackModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFeedbackModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFeedbackModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.feedbackModalContainer}>
+              <Ionicons
+                name={feedbackIsError ? 'alert-circle' : 'checkmark-circle'}
+                size={48}
+                color={feedbackIsError ? '#FF3B30' : '#34C759'}
+                style={{ marginBottom: 12 }}
+              />
+              <Text style={styles.feedbackModalTitle}>{feedbackTitle}</Text>
+              <Text style={styles.feedbackModalMessage}>{feedbackMessage}</Text>
+              <TouchableOpacity
+                style={[styles.feedbackModalBtn, feedbackIsError && { backgroundColor: '#FF3B30' }]}
+                onPress={() => setShowFeedbackModal(false)}
+              >
+                <Text style={styles.feedbackModalBtnText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -2839,6 +2987,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmSaveText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  feedbackModalContainer: {
+    width: '80%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#332354',
+    alignItems: 'center',
+  },
+  feedbackModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  feedbackModalMessage: {
+    fontSize: 14,
+    color: '#BDB4FF',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  feedbackModalBtn: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+  },
+  feedbackModalBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
