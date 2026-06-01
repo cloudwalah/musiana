@@ -34,6 +34,10 @@ interface AudioContextProps {
   removeFromQueue: (index: number) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   clearQueue: () => void;
+
+  // Active playlist tracking
+  activePlaylistId: string | null;
+  setActivePlaylistId: (id: string | null) => void;
 }
 
 const AudioContext = createContext<AudioContextProps | undefined>(undefined);
@@ -54,6 +58,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Stateful Queue States
   const [queue, setQueueState] = useState<Music[]>([]);
   const [currentIndex, setCurrentIndexState] = useState<number>(-1);
+
+  // Active playlist tracking (which playlist initiated current playback)
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
 
   // Refs to avoid stale React closures inside AVPlayback callbacks
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -373,6 +380,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         removeFromQueue,
         reorderQueue,
         clearQueue,
+        activePlaylistId,
+        setActivePlaylistId,
       }}
     >
       {children}

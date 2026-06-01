@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, BackHandler, TouchableWithoutFeedback } from 'react-native';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, BackHandler, TouchableWithoutFeedback, Animated, Easing } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,75 @@ import Slider from '@react-native-community/slider';
 
 const { width } = Dimensions.get('window');
 const GRID_ITEM_WIDTH = (width - 30) / 2;
+
+// MarqueeText component for auto-scrolling long text
+const MarqueeText = ({ text, style }: { text: string; style: any }) => {
+  const animatedValue = useRef(new Animated.Value(0)).current;
+  const [textWidth, setTextWidth] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  useEffect(() => {
+    animatedValue.setValue(0);
+    if (textWidth > containerWidth && containerWidth > 0) {
+      const spacerWidth = 50;
+      const scrollRange = textWidth + spacerWidth;
+      const duration = scrollRange * 35; // 35ms per pixel scroll speed
+
+      const animation = Animated.loop(
+        Animated.timing(animatedValue, {
+          toValue: -scrollRange,
+          duration: duration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [text, textWidth, containerWidth]);
+
+  const isScrollable = textWidth > containerWidth && containerWidth > 0;
+
+  return (
+    <View
+      style={{
+        width: '100%',
+        overflow: 'hidden',
+        alignItems: isScrollable ? 'flex-start' : 'center',
+        justifyContent: 'center',
+      }}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+    >
+      <Animated.View
+        style={{
+          flexDirection: 'row',
+          transform: [{ translateX: animatedValue }],
+          width: isScrollable ? (textWidth * 2 + 50) : '100%',
+          justifyContent: isScrollable ? 'flex-start' : 'center',
+        }}
+      >
+        <Text
+          style={[style, { width: 'auto', textAlign: isScrollable ? 'left' : 'center' }]}
+          numberOfLines={1}
+          onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}
+        >
+          {text}
+        </Text>
+        {isScrollable && (
+          <>
+            <View style={{ width: 50 }} />
+            <Text
+              style={[style, { width: 'auto', textAlign: 'left' }]}
+              numberOfLines={1}
+            >
+              {text}
+            </Text>
+          </>
+        )}
+      </Animated.View>
+    </View>
+  );
+};
 
 type TabType = 'songs' | 'profile' | 'playlists';
 
@@ -62,6 +131,9 @@ export default function HomeScreen() {
   // Dropdown options menu state
   const [activeDropdownPlaylistId, setActiveDropdownPlaylistId] = useState<string | null>(null);
 
+  // Logout confirmation modal
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
   // Search type selector: songs vs playlists vs both
   const [searchType, setSearchType] = useState<'songs' | 'playlists' | 'both'>('songs');
   const [searchResultsPlaylists, setSearchResultsPlaylists] = useState<any[]>([]);
@@ -80,7 +152,9 @@ export default function HomeScreen() {
     addToQueue,
     clearQueue,
     isShuffle,
-    toggleShuffle
+    toggleShuffle,
+    activePlaylistId,
+    setActivePlaylistId
   } = useAudio();
 
   // Re-fetch the music list every time this screen comes into focus.
@@ -341,6 +415,7 @@ export default function HomeScreen() {
       await pause();
     }
     
+    setActivePlaylistId(null);
     await api.clearAuth();
     router.replace('/');
   };
@@ -379,6 +454,7 @@ export default function HomeScreen() {
     
     clearQueue();
     setContextMusicList(playlist.songs);
+    setActivePlaylistId(playlist._id);
     
     if (isShuffle) {
       const randomIndex = Math.floor(Math.random() * playlist.songs.length);
@@ -459,6 +535,7 @@ export default function HomeScreen() {
     setContextMusicList(displayList);
 
     if (currentlyPlaying?._id !== item._id) {
+      setActivePlaylistId(null);
       await play(item);
     }
     router.push('/player');
@@ -479,6 +556,7 @@ export default function HomeScreen() {
         await resume();
       }
     } else {
+      setActivePlaylistId(null);
       await play(item);
     }
   };
@@ -543,8 +621,65 @@ export default function HomeScreen() {
           <Text style={styles.headerTitleLeft} numberOfLines={1}>
             {selectedPlaylist.name}
           </Text>
-          <View style={{ width: 10 }} />
+          {selectedPlaylist.isDefault ? (
+            <View style={{ width: 10 }} />
+          ) : (
+            <TouchableOpacity
+              style={styles.detailsHeaderOptionsBtn}
+              onPress={() => setActiveDropdownPlaylistId(
+                activeDropdownPlaylistId === selectedPlaylist._id ? null : selectedPlaylist._id
+              )}
+            >
+              <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
+
+        {/* Inline dropdown for playlist detail header options */}
+        {!selectedPlaylist.isDefault && activeDropdownPlaylistId === selectedPlaylist._id && (
+          <>
+            <TouchableOpacity
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+                backgroundColor: 'transparent',
+                zIndex: 990,
+              }}
+              activeOpacity={1}
+              onPress={() => setActiveDropdownPlaylistId(null)}
+            />
+            <View style={[styles.playlistDropdownMenu, { position: 'absolute', top: 52, right: 10, zIndex: 995 }]}>
+              <TouchableOpacity
+                style={styles.playlistDropdownOption}
+                onPress={() => {
+                  setActiveDropdownPlaylistId(null);
+                  setPlaylistToUpdate(selectedPlaylist);
+                  setShowVisibilityModal(true);
+                }}
+              >
+                <Ionicons name={selectedPlaylist.isPrivate ? 'eye-outline' : 'eye-off-outline'} size={16} color="#BDB4FF" />
+                <Text style={styles.playlistDropdownOptionText}>
+                  {selectedPlaylist.isPrivate ? 'Make Public' : 'Make Private'}
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.playlistDropdownDivider} />
+              <TouchableOpacity
+                style={styles.playlistDropdownOption}
+                onPress={() => {
+                  setActiveDropdownPlaylistId(null);
+                  setPlaylistToDelete(selectedPlaylist);
+                  setShowDeletePlaylistModal(true);
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+                <Text style={[styles.playlistDropdownOptionText, { color: '#FF3B30' }]}>Delete Playlist</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         <FlatList
           data={selectedPlaylist.songs || []}
@@ -592,13 +727,14 @@ export default function HomeScreen() {
             </View>
           }
           renderItem={({ item, index }) => {
-            const isPlayingCurrent = currentlyPlaying?._id === item._id && isPlaying;
+            const isPlayingCurrent = currentlyPlaying?._id === item._id && isPlaying && activePlaylistId === selectedPlaylist._id;
             return (
               <View style={styles.detailsSongItem}>
                 <TouchableOpacity
                   style={styles.detailsSongClickable}
                   onPress={async () => {
                     if (currentlyPlaying?._id !== item._id) {
+                      setActivePlaylistId(selectedPlaylist._id);
                       await play(item);
                     } else if (!isPlaying) {
                       await resume();
@@ -1043,6 +1179,12 @@ export default function HomeScreen() {
         {/* Profile Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>User Profile</Text>
+          <TouchableOpacity
+            style={styles.profileHeaderLogoutBtn}
+            onPress={() => setShowLogoutModal(true)}
+          >
+            <Ionicons name="log-out-outline" size={22} color="#FF3B30" />
+          </TouchableOpacity>
         </View>
 
         <FlatList
@@ -1162,11 +1304,7 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Logout button */}
-              <TouchableOpacity style={styles.profileLogoutButton} onPress={handleLogout}>
-                <Ionicons name="log-out-outline" size={20} color="#fff" style={styles.logoutIcon} />
-                <Text style={styles.profileLogoutText}>Log Out</Text>
-              </TouchableOpacity>
+
             </View>
           )}
         />
@@ -1346,6 +1484,46 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Logout Confirmation Modal */}
+      <Modal
+        visible={showLogoutModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowLogoutModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLogoutModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              <Text style={styles.confirmModalTitle}>Log Out</Text>
+              <Text style={styles.confirmModalSub}>
+                Are you sure you want to log out of this account?
+              </Text>
+              <View style={styles.confirmActionRow}>
+                <TouchableOpacity
+                  style={styles.confirmCancelBtn}
+                  onPress={() => setShowLogoutModal(false)}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmSaveBtn, { backgroundColor: '#FF3B30' }]}
+                  onPress={() => {
+                    setShowLogoutModal(false);
+                    handleLogout();
+                  }}
+                >
+                  <Text style={styles.confirmSaveText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Tab Switcher Body */}
       {activeTab === 'songs' && (
         selectedPlaylist ? renderPlaylistDetails() : renderSongsTab()
@@ -1372,9 +1550,7 @@ export default function HomeScreen() {
                 )}
               </View>
               <View style={styles.miniPlayerTitleContainer}>
-                <Text style={styles.miniPlayerTitle} numberOfLines={1}>
-                  {currentlyPlaying.title}
-                </Text>
+                <MarqueeText text={currentlyPlaying.title} style={styles.miniPlayerTitle} />
               </View>
             </TouchableOpacity>
 
@@ -1960,26 +2136,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
   },
-  profileLogoutButton: {
-    flexDirection: 'row',
-    backgroundColor: '#FF3B30',
-    padding: 15,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#FF3B30',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  profileLogoutText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  logoutIcon: {
-    marginRight: 8,
+  profileHeaderLogoutBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 59, 48, 0.12)',
   },
   userRow: {
     flexDirection: 'row',
@@ -2497,6 +2657,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
     flex: 1,
+  },
+  detailsHeaderOptionsBtn: {
+    padding: 6,
+    marginLeft: 8,
   },
   headerPlayPlaylistBtn: {
     width: 36,

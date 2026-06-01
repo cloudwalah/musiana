@@ -132,6 +132,19 @@ export default function PlayerScreen() {
   const [createAndAddTags, setCreateAndAddTags] = useState('');
   const [createAndAddIsPrivate, setCreateAndAddIsPrivate] = useState(true);
 
+  // Custom feedback modal (replaces Alert.alert)
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackTitle, setFeedbackTitle] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackIsError, setFeedbackIsError] = useState(false);
+
+  const showFeedback = (title: string, message: string, isError = false) => {
+    setFeedbackTitle(title);
+    setFeedbackMessage(message);
+    setFeedbackIsError(isError);
+    setShowFeedbackModal(true);
+  };
+
   // If we are not sliding, sync the sliding value with the actual position
   useEffect(() => {
     if (!isSliding) {
@@ -605,14 +618,14 @@ export default function PlayerScreen() {
                         try {
                           const res = await api.addSongToPlaylist(item._id, currentlyPlaying._id);
                           if (res.success) {
-                            Alert.alert('Success', `Added to ${item.name}`);
                             setShowPlaylistSelectModal(false);
+                            showFeedback('Success', `Added to ${item.name}`);
                           } else {
-                            Alert.alert('Error', res.message || 'Failed to add song to playlist');
+                            showFeedback('Error', res.message || 'Failed to add song to playlist', true);
                           }
                         } catch (err: any) {
                           const errorMsg = err.response?.data?.message || 'Failed to add song to playlist';
-                          Alert.alert('Error', errorMsg);
+                          showFeedback('Error', errorMsg, true);
                         }
                       }}
                     >
@@ -711,7 +724,7 @@ export default function PlayerScreen() {
                   style={styles.playlistCreateBtn}
                   onPress={async () => {
                     if (!createAndAddName.trim()) {
-                      Alert.alert('Error', 'Playlist name is required');
+                      showFeedback('Error', 'Playlist name is required', true);
                       return;
                     }
                     try {
@@ -726,27 +739,60 @@ export default function PlayerScreen() {
                         const addRes = await api.addSongToPlaylist(newPlaylistId, currentlyPlaying._id);
                         
                         if (addRes.success) {
-                          Alert.alert('Success', `Playlist created and "${currentlyPlaying.title}" added!`);
                           setShowCreateAndAddModal(false);
                           setShowPlaylistSelectModal(false);
                           setCreateAndAddName('');
                           setCreateAndAddTags('');
                           setCreateAndAddIsPrivate(true);
+                          showFeedback('Success', `Playlist created and "${currentlyPlaying.title}" added!`);
                         } else {
-                          Alert.alert('Error', addRes.message || 'Failed to add song to the new playlist');
+                          showFeedback('Error', addRes.message || 'Failed to add song to the new playlist', true);
                         }
                       } else {
-                        Alert.alert('Error', createRes.message || 'Failed to create playlist');
+                        showFeedback('Error', createRes.message || 'Failed to create playlist', true);
                       }
                     } catch (err: any) {
                       const errorMsg = err.response?.data?.message || 'Failed to create and add';
-                      Alert.alert('Error', errorMsg);
+                      showFeedback('Error', errorMsg, true);
                     }
                   }}
                 >
                   <Text style={styles.playlistCreateBtnText}>Create Playlist</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Custom Feedback Modal (replaces Alert.alert) */}
+      <Modal
+        visible={showFeedbackModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFeedbackModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFeedbackModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.feedbackModalContainer}>
+              <Ionicons
+                name={feedbackIsError ? 'alert-circle' : 'checkmark-circle'}
+                size={48}
+                color={feedbackIsError ? '#FF3B30' : '#34C759'}
+                style={{ marginBottom: 12 }}
+              />
+              <Text style={styles.feedbackModalTitle}>{feedbackTitle}</Text>
+              <Text style={styles.feedbackModalMessage}>{feedbackMessage}</Text>
+              <TouchableOpacity
+                style={[styles.feedbackModalBtn, feedbackIsError && { backgroundColor: '#FF3B30' }]}
+                onPress={() => setShowFeedbackModal(false)}
+              >
+                <Text style={styles.feedbackModalBtnText}>OK</Text>
+              </TouchableOpacity>
             </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
@@ -1318,6 +1364,41 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   playlistCreateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  feedbackModalContainer: {
+    width: '80%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#332354',
+    alignItems: 'center',
+  },
+  feedbackModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  feedbackModalMessage: {
+    fontSize: 14,
+    color: '#BDB4FF',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  feedbackModalBtn: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+  },
+  feedbackModalBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
