@@ -808,38 +808,55 @@ export default function HomeScreen() {
 
   const renderSearchPills = () => {
     if (!isSearching) return null;
+
+    const isSongsActive = searchType === 'songs' || searchType === 'both';
+    const isPlaylistsActive = searchType === 'playlists' || searchType === 'both';
+
     return (
       <View style={styles.pillsContainer}>
         <TouchableOpacity 
-          style={[styles.pill, searchType === 'songs' && styles.pillActive]} 
+          style={[styles.pill, isSongsActive && styles.pillActive]} 
           onPress={() => {
-            setSearchType('songs');
-            setSearchResultsPlaylists([]);
-          }}
-        >
-          <Text style={[styles.pillText, searchType === 'songs' && styles.pillTextActive]}>Songs</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.pill, searchType === 'playlists' && styles.pillActive]} 
-          onPress={() => {
-            setSearchType('playlists');
+            let newType: 'songs' | 'playlists' | 'both';
+            if (searchType === 'songs') {
+              newType = 'songs'; // Unticking songs when only songs is active -> stays songs (fallback)
+            } else if (searchType === 'playlists') {
+              newType = 'both'; // Playlists was active, ticking songs -> both active
+            } else {
+              newType = 'playlists'; // Both active, unticking songs -> only playlists active
+            }
+            setSearchType(newType);
+            if (newType === 'songs') {
+              setSearchResultsPlaylists([]);
+            }
             if (searchQuery.trim()) {
               setTimeout(() => handleSearchSubmit(), 50);
             }
           }}
         >
-          <Text style={[styles.pillText, searchType === 'playlists' && styles.pillTextActive]}>Playlists</Text>
+          <Text style={[styles.pillText, isSongsActive && styles.pillTextActive]}>Songs</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.pill, searchType === 'both' && styles.pillActive]} 
+          style={[styles.pill, isPlaylistsActive && styles.pillActive]} 
           onPress={() => {
-            setSearchType('both');
+            let newType: 'songs' | 'playlists' | 'both';
+            if (searchType === 'playlists') {
+              newType = 'songs'; // Unticking playlists when only playlists is active -> fallback to songs
+            } else if (searchType === 'songs') {
+              newType = 'both'; // Songs was active, ticking playlists -> both active
+            } else {
+              newType = 'songs'; // Both active, unticking playlists -> only songs active
+            }
+            setSearchType(newType);
+            if (newType === 'songs') {
+              setSearchResultsPlaylists([]);
+            }
             if (searchQuery.trim()) {
               setTimeout(() => handleSearchSubmit(), 50);
             }
           }}
         >
-          <Text style={[styles.pillText, searchType === 'both' && styles.pillTextActive]}>Both</Text>
+          <Text style={[styles.pillText, isPlaylistsActive && styles.pillTextActive]}>Playlists</Text>
         </TouchableOpacity>
       </View>
     );
@@ -879,9 +896,15 @@ export default function HomeScreen() {
               ) : null}
             </View>
           ) : (
-            <>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity 
+                style={styles.headerProfileCircle}
+                onPress={() => handleTabChange('profile')}
+              >
+                <Ionicons name="person" size={16} color="#BDB4FF" />
+              </TouchableOpacity>
               <Text style={styles.headerTitle}>Musiana</Text>
-            </>
+            </View>
           )}
         </View>
 
@@ -1134,7 +1157,15 @@ export default function HomeScreen() {
       <View style={styles.tabContentContainer}>
         {/* Library Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Library</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity 
+              style={styles.headerProfileCircle}
+              onPress={() => handleTabChange('profile')}
+            >
+              <Ionicons name="person" size={16} color="#BDB4FF" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>My Library</Text>
+          </View>
           <TouchableOpacity 
             style={styles.createPlaylistHeaderBtn}
             onPress={() => {
@@ -1178,7 +1209,12 @@ export default function HomeScreen() {
       <View style={styles.tabContentContainer}>
         {/* Profile Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>User Profile</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={styles.headerProfileCircle}>
+              <Ionicons name="person" size={16} color="#BDB4FF" />
+            </View>
+            <Text style={styles.headerTitle}>User Profile</Text>
+          </View>
           <TouchableOpacity
             style={styles.profileHeaderLogoutBtn}
             onPress={() => setShowLogoutModal(true)}
@@ -1627,19 +1663,7 @@ export default function HomeScreen() {
           </Text>
         </TouchableOpacity>
  
-        <TouchableOpacity 
-          style={[styles.tabItem, activeTab === 'profile' && styles.tabItemActive]}
-          onPress={() => handleTabChange('profile')}
-        >
-          <Ionicons 
-            name={activeTab === 'profile' ? 'person' : 'person-outline'} 
-            size={22} 
-            color={activeTab === 'profile' ? '#BDB4FF' : '#7C7899'} 
-          />
-          <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>
-            Profile
-          </Text>
-        </TouchableOpacity>
+
       </View>
 
       {/* Create Playlist Modal */}
@@ -2775,5 +2799,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  headerProfileCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#251842',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#332354',
   },
 });
