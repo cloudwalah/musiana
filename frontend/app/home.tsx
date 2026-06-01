@@ -49,6 +49,15 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
       }}
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
+      {/* Hidden text to measure actual untruncated width */}
+      <Text
+        style={[style, { position: 'absolute', opacity: 0, width: 'auto' }]}
+        numberOfLines={1}
+        onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}
+      >
+        {text}
+      </Text>
+
       <Animated.View
         style={{
           flexDirection: 'row',
@@ -60,7 +69,6 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
         <Text
           style={[style, { width: 'auto', textAlign: isScrollable ? 'left' : 'center' }]}
           numberOfLines={1}
-          onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}
         >
           {text}
         </Text>
@@ -334,7 +342,7 @@ export default function HomeScreen() {
       const userData = await api.getUser();
       console.log('👤 Loaded user data in home.tsx:', userData);
       setUser(userData);
-      if (userData && userData.role === 'admin') {
+      if (userData && (userData.role === 'admin' || userData.role === 'super-admin')) {
         setUsersLoading(true);
         try {
           const response = await api.getAllUsers();
@@ -375,6 +383,36 @@ export default function HomeScreen() {
             } catch (err: any) {
               console.log('Promote error:', err);
               Alert.alert('Error', err.response?.data?.message || 'Failed to promote user');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleDemoteToUser = async (userId: string, targetUsername: string) => {
+    Alert.alert(
+      'Demote Admin',
+      `Are you sure you want to demote "${targetUsername}" to a regular User?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Demote', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await api.demoteUser(userId);
+              if (response.success) {
+                Alert.alert('Success', `"${targetUsername}" demoted to user successfully!`);
+                // Refresh list
+                const usersResponse = await api.getAllUsers();
+                if (usersResponse.success) {
+                  setAllUsers(usersResponse.data || []);
+                }
+              }
+            } catch (err: any) {
+              console.log('Demote error:', err);
+              Alert.alert('Error', err.response?.data?.message || 'Failed to demote user');
             }
           }
         }
@@ -903,7 +941,7 @@ export default function HomeScreen() {
                 style={styles.headerProfileSquare}
                 onPress={() => handleTabChange('profile')}
               >
-                <Ionicons name="person" size={16} color="#BDB4FF" />
+                <Ionicons name="person" size={18} color="#BDB4FF" />
               </TouchableOpacity>
             </>
           )}
@@ -1175,7 +1213,7 @@ export default function HomeScreen() {
               style={[styles.headerProfileSquare, { marginLeft: 12 }]}
               onPress={() => handleTabChange('profile')}
             >
-              <Ionicons name="person" size={16} color="#BDB4FF" />
+              <Ionicons name="person" size={18} color="#BDB4FF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1301,9 +1339,9 @@ export default function HomeScreen() {
               </View>
 
               {/* Admin User Management Section */}
-              {user?.role === 'admin' && (
+              {(user?.role === 'admin' || user?.role === 'super-admin') && (
                 <View style={styles.formCard}>
-                  <Text style={styles.formTitle}>Manage Users (Admin Only)</Text>
+                  <Text style={styles.formTitle}>Manage Users</Text>
                   
                   {usersLoading ? (
                     <ActivityIndicator size="small" color="#8B5CF6" style={{ marginVertical: 10 }} />
@@ -1317,18 +1355,27 @@ export default function HomeScreen() {
                           <Text style={styles.userRowEmail}>{u.email}</Text>
                           <Text style={[
                             styles.userRoleBadge,
-                            u.role === 'admin' ? styles.userRoleAdmin : styles.userRoleUser
+                            u.role === 'super-admin' ? { backgroundColor: '#8B5CF6', color: '#FFFFFF' } : u.role === 'admin' ? styles.userRoleAdmin : styles.userRoleUser
                           ]}>
                             {u.role.toUpperCase()}
                           </Text>
                         </View>
-                        {u.role !== 'admin' && (
-                          <TouchableOpacity 
-                            style={styles.promoteButton}
-                            onPress={() => handlePromoteToAdmin(u._id, u.username)}
-                          >
-                            <Text style={styles.promoteButtonText}>Promote</Text>
-                          </TouchableOpacity>
+                        {u.username !== user?.username && u.role !== 'super-admin' && (
+                          u.role === 'admin' ? (
+                            <TouchableOpacity 
+                              style={[styles.promoteButton, { backgroundColor: '#FF3B30' }]}
+                              onPress={() => handleDemoteToUser(u._id, u.username)}
+                            >
+                              <Text style={styles.promoteButtonText}>Demote</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity 
+                              style={styles.promoteButton}
+                              onPress={() => handlePromoteToAdmin(u._id, u.username)}
+                            >
+                              <Text style={styles.promoteButtonText}>Promote</Text>
+                            </TouchableOpacity>
+                          )
                         )}
                       </View>
                     ))
@@ -2797,8 +2844,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   headerProfileSquare: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     backgroundColor: '#251842',
     justifyContent: 'center',

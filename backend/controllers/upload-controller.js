@@ -255,4 +255,50 @@ const trimAndDownloadAudio = async (req, res) => {
   }
 };
 
-module.exports = { uploadAudio, trimAudio, trimAndDownloadAudio }
+const deleteAudio = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const music = await Music.findById(id);
+    if (!music) {
+      return res.status(404).json({
+        success: false,
+        message: 'Song not found'
+      });
+    }
+
+    // 1. Delete from Cloudinary
+    if (music.public_id) {
+      try {
+        console.log(`🗑 Deleting track from Cloudinary: ${music.public_id}`);
+        await cloudinary.uploader.destroy(music.public_id, { resource_type: 'video' });
+      } catch (destroyError) {
+        console.warn('⚠️ Cloudinary deletion failed:', destroyError.message);
+      }
+    }
+
+    // 2. Remove reference from all playlists
+    const Playlist = require('../models/Playlist');
+    await Playlist.updateMany({}, { $pull: { songs: id } });
+
+    // 3. Delete from database
+    await Music.findByIdAndDelete(id);
+
+    console.log(`✅ Successfully deleted song "${music.title}" from DB and Cloudinary`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Song deleted successfully from DB and Cloudinary'
+    });
+
+  } catch (error) {
+    console.error('❌ Deletion error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete song',
+      error: error.message
+    });
+  }
+};
+
+module.exports = { uploadAudio, trimAudio, trimAndDownloadAudio, deleteAudio }

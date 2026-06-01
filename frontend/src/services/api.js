@@ -263,6 +263,34 @@ export const api = {
     return response.data;
   },
 
+  // Demote an admin to user (Admin/Super-Admin only)
+  demoteUser: async (userId) => {
+    const token = await AsyncStorage.getItem('token');
+    console.log(`🚀 Admin: Demoting user ${userId} to user...`);
+    
+    const response = await axios.put(`${API_URL}/users/${userId}/demote`, {}, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    return response.data;
+  },
+
+  // Delete a song from the database and storage entirely (Admin only)
+  deleteSong: async (songId) => {
+    const token = await AsyncStorage.getItem('token');
+    console.log(`🚀 Admin: Deleting song ${songId}...`);
+    
+    const response = await axios.delete(`${API_URL}/upload/delete/${songId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    return response.data;
+  },
+
   // Trim a song between startTime and endTime (Admin only)
   trimMusic: async (musicId, startTime, endTime) => {
     const token = await AsyncStorage.getItem('token');

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { uploadAudio, trimAudio, trimAndDownloadAudio } = require('../controllers/upload-controller');
+const { uploadAudio, trimAudio, trimAndDownloadAudio, deleteAudio } = require('../controllers/upload-controller');
 const authMiddleware = require('../middlewares/auth-middleware')
 const checkAdmin = require('../middlewares/admin-middleware')
 
@@ -13,6 +13,9 @@ router.post('/audio', authMiddleware, checkAdmin, upload.single('audio'), upload
 
 // POST /api/upload/trim/:id - Trim audio file
 router.post('/trim/:id', authMiddleware, checkAdmin, trimAudio);
+
+// DELETE /api/upload/delete/:id - Delete audio file (Admin only)
+router.delete('/delete/:id', authMiddleware, checkAdmin, deleteAudio);
 
 // GET /api/upload/trim-download/:id - Trim and stream/download ringtone (all users)
 router.get('/trim-download/:id', authMiddleware, trimAndDownloadAudio);

@@ -51,6 +51,15 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
       }}
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
+      {/* Hidden text to measure actual untruncated width */}
+      <Text
+        style={[style, { position: 'absolute', opacity: 0, width: 'auto' }]}
+        numberOfLines={1}
+        onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}
+      >
+        {text}
+      </Text>
+
       <Animated.View
         style={{
           flexDirection: 'row',
@@ -62,7 +71,6 @@ const MarqueeText = ({ text, style }: { text: string; style: any }) => {
         <Text
           style={[style, { width: 'auto', textAlign: isScrollable ? 'left' : 'center' }]}
           numberOfLines={1}
-          onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}
         >
           {text}
         </Text>
@@ -139,11 +147,37 @@ export default function PlayerScreen() {
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [feedbackIsError, setFeedbackIsError] = useState(false);
 
+  // Delete song confirmation state
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+
   const showFeedback = (title: string, message: string, isError = false) => {
     setFeedbackTitle(title);
     setFeedbackMessage(message);
     setFeedbackIsError(isError);
     setShowFeedbackModal(true);
+  };
+
+  const handleDeleteSong = async () => {
+    setShowDeleteConfirmModal(false);
+    try {
+      if (!currentlyPlaying || !currentlyPlaying._id) return;
+      
+      const response = await api.deleteSong(currentlyPlaying._id);
+      if (response.success) {
+        showFeedback('Success', `"${currentlyPlaying.title}" deleted from database successfully`);
+        
+        // Remove from local queue
+        removeFromQueue(currentIndex);
+        
+        // Go back to previous screen after a delay
+        setTimeout(() => {
+          router.back();
+        }, 1500);
+      }
+    } catch (err: any) {
+      console.log('Delete song error:', err);
+      showFeedback('Error', err.response?.data?.message || 'Failed to delete song', true);
+    }
   };
 
   // If we are not sliding, sync the sliding value with the actual position
@@ -159,7 +193,7 @@ export default function PlayerScreen() {
         const user = await AsyncStorage.getItem('user');
         if (user) {
           const parsed = JSON.parse(user);
-          setIsAdmin(parsed.role === 'admin');
+          setIsAdmin(parsed.role === 'admin' || parsed.role === 'super-admin');
         }
       } catch (err) {
         console.log('Error checking role:', err);
@@ -441,16 +475,29 @@ export default function PlayerScreen() {
               <Text style={styles.optionsTitle}>Track Actions</Text>
               
               {isAdmin && (
-                <TouchableOpacity 
-                  style={styles.optionRow} 
-                  onPress={() => {
-                    setShowOptionsModal(false);
-                    router.push('/trim');
-                  }}
-                >
-                  <Ionicons name="cut-outline" size={20} color="#FF3B30" style={{ marginRight: 10 }} />
-                  <Text style={styles.optionText}>Trim this audio (Global Edit)</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity 
+                    style={styles.optionRow} 
+                    onPress={() => {
+                      setShowOptionsModal(false);
+                      router.push('/trim');
+                    }}
+                  >
+                    <Ionicons name="cut-outline" size={20} color="#FF3B30" style={{ marginRight: 10 }} />
+                    <Text style={styles.optionText}>Trim this audio (Global Edit)</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.optionRow} 
+                    onPress={() => {
+                      setShowOptionsModal(false);
+                      setShowDeleteConfirmModal(true);
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#FF3B30" style={{ marginRight: 10 }} />
+                    <Text style={[styles.optionText, { color: '#FF3B30' }]}>Delete song from database</Text>
+                  </TouchableOpacity>
+                </>
               )}
 
               <TouchableOpacity 
@@ -794,6 +841,44 @@ export default function PlayerScreen() {
               >
                 <Text style={styles.feedbackModalBtnText}>OK</Text>
               </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Delete Song Confirmation Modal */}
+      <Modal
+        visible={showDeleteConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDeleteConfirmModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setShowDeleteConfirmModal(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              <Ionicons name="warning-outline" size={48} color="#FF3B30" style={{ marginBottom: 12 }} />
+              <Text style={styles.confirmModalTitle}>Delete Song Entirely?</Text>
+              <Text style={styles.confirmModalSub}>
+                Warning: This will delete this song from the database and storage entirely. This action cannot be undone.
+              </Text>
+              <View style={styles.confirmActionRow}>
+                <TouchableOpacity 
+                  style={styles.confirmCancelBtn}
+                  onPress={() => setShowDeleteConfirmModal(false)}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.confirmSaveBtn}
+                  onPress={handleDeleteSong}
+                >
+                  <Text style={styles.confirmSaveText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
@@ -1398,6 +1483,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   feedbackModalBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  confirmModalContainer: {
+    width: '85%',
+    backgroundColor: '#1C1330',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#332354',
+    alignItems: 'center',
+  },
+  confirmModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  confirmModalSub: {
+    fontSize: 14,
+    color: '#BDB4FF',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  confirmActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  confirmCancelBtn: {
+    flex: 0.46,
+    backgroundColor: '#251842',
+    borderWidth: 1,
+    borderColor: '#332354',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmCancelText: {
+    color: '#7C7899',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  confirmSaveBtn: {
+    flex: 0.46,
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmSaveText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
