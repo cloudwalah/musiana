@@ -1,6 +1,13 @@
 import { Stack } from 'expo-router';
 import { AudioProvider } from '../src/context/AudioContext';
 
+try {
+  const TrackPlayer = require('react-native-track-player').default;
+  TrackPlayer.registerPlaybackService(() => require('../track-player-services'));
+} catch (e) {
+  console.log("TrackPlayer playback service skipped (running in Expo Go)");
+}
+
 export default function RootLayout() {
   return (
     <AudioProvider>

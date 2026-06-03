@@ -62,6 +62,10 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Active playlist tracking (which playlist initiated current playback)
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
 
+  // Track player flags
+  const [useNativeTrackPlayer, setUseNativeTrackPlayer] = useState(false);
+  const useNativeTrackPlayerRef = useRef(false);
+
   // Refs to avoid stale React closures inside AVPlayback callbacks
   const soundRef = useRef<Audio.Sound | null>(null);
   const musicListRef = useRef<Music[]>([]);
@@ -73,6 +77,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   
   const queueRef = useRef<Music[]>([]);
   const currentIndexRef = useRef<number>(-1);
+  const userAddedCountRef = useRef<number>(0);
 
   // Sync state reference variables
   useEffect(() => {
@@ -83,10 +88,125 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     return () => {
       if (soundRef.current) {
-        soundRef.current.unloadAsync();
+        soundRef.current.unloadAsync().catch(() => {});
+      }
+      if (useNativeTrackPlayerRef.current) {
+        try {
+          const TrackPlayer = require('react-native-track-player').default;
+          TrackPlayer.destroy().catch(() => {});
+        } catch (e) {}
       }
     };
   }, []);
+
+  // Setup TrackPlayer dynamically
+  useEffect(() => {
+    let active = true;
+    let eventListeners: any[] = [];
+    
+    const initTrackPlayer = async () => {
+      try {
+        const TrackPlayer = require('react-native-track-player').default;
+        const { Capability, Event, State } = require('react-native-track-player');
+        
+        await TrackPlayer.setupPlayer();
+        await TrackPlayer.updateOptions({
+          capabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+            Capability.SeekTo,
+          ],
+          compactCapabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+          ],
+        });
+        
+        if (active) {
+          setUseNativeTrackPlayer(true);
+          useNativeTrackPlayerRef.current = true;
+          console.log("✅ Native TrackPlayer is available and configured.");
+        }
+
+        // Add event listeners for TrackPlayer events
+        const activeTrackListener = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (event: any) => {
+          const index = event.index;
+          if (index !== undefined && index !== null && active) {
+            const q = queueRef.current;
+            if (index >= 0 && index < q.length) {
+              const matchedSong = q[index];
+              setCurrentlyPlaying(matchedSong);
+              currentlyPlayingRef.current = matchedSong;
+              setCurrentIndex(index);
+              // Reset manual user queue count on track change
+              userAddedCountRef.current = 0;
+            }
+          }
+        });
+        eventListeners.push(activeTrackListener);
+
+        const playbackStateListener = TrackPlayer.addEventListener(Event.PlaybackState, (event: any) => {
+          if (active) {
+            const isPlayingState = event.state === State.Playing || event.state === 'playing';
+            setIsPlaying(isPlayingState);
+          }
+        });
+        eventListeners.push(playbackStateListener);
+
+      } catch (err) {
+        console.log("⚠️ Native TrackPlayer not available (falling back to Expo AV):", err);
+        if (active) {
+          setUseNativeTrackPlayer(false);
+          useNativeTrackPlayerRef.current = false;
+        }
+      }
+    };
+
+    initTrackPlayer();
+
+    return () => {
+      active = false;
+      eventListeners.forEach(l => l.remove());
+    };
+  }, []);
+
+  // Sync Loop Mode to TrackPlayer RepeatMode
+  useEffect(() => {
+    if (useNativeTrackPlayer) {
+      try {
+        const TrackPlayer = require('react-native-track-player').default;
+        const { RepeatMode } = require('react-native-track-player');
+        TrackPlayer.setRepeatMode(isLoop ? RepeatMode.Track : RepeatMode.Queue);
+      } catch (e) {
+        console.error("Failed to sync loop mode to TrackPlayer:", e);
+      }
+    }
+  }, [isLoop, useNativeTrackPlayer]);
+
+  // Periodic progress tracker for TrackPlayer
+  useEffect(() => {
+    let interval: any;
+    if (isPlaying && useNativeTrackPlayer) {
+      interval = setInterval(async () => {
+        try {
+          const TrackPlayer = require('react-native-track-player').default;
+          const pos = await TrackPlayer.getPosition();
+          const dur = await TrackPlayer.getDuration();
+          setPosition(pos * 1000); // convert seconds to ms
+          setDuration(dur * 1000);
+        } catch (e) {
+          // ignore
+        }
+      }, 500);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isPlaying, useNativeTrackPlayer]);
 
   const setQueue = (newQueue: Music[]) => {
     setQueueState(newQueue);
@@ -101,24 +221,44 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const setMusicList = (list: Music[]) => {
     setMusicListState(list);
     musicListRef.current = list;
-    
-    // Auto-populate queue with library list if queue is empty
-    if (queueRef.current.length === 0) {
-      setQueue(list);
-    }
+    setQueue(list); // Always update queue context so it aligns with displayed tab/search
   };
 
-  const addToQueue = (song: Music) => {
+  const addToQueue = async (song: Music) => {
     const newQueue = [...queueRef.current];
     const currentIdx = currentIndexRef.current;
     
-    // Insert song right after the current index so it plays next
-    newQueue.splice(currentIdx + 1, 0, song);
+    // Insert song in FIFO order relative to other user-queued songs
+    const insertIdx = currentIdx + 1 + userAddedCountRef.current;
+    newQueue.splice(insertIdx, 0, song);
     setQueue(newQueue);
+    userAddedCountRef.current += 1;
     console.log('➕ Queue: Added track to play next:', song.title);
+
+    if (useNativeTrackPlayer) {
+      try {
+        const TrackPlayer = require('react-native-track-player').default;
+        const track = {
+          id: song._id,
+          url: song.url,
+          title: song.title,
+          artist: 'Musiana Library',
+          artwork: song.imageUrl || '',
+          duration: parseFloat(song.duration) || 0,
+        };
+        await TrackPlayer.add([track], insertIdx);
+      } catch (e) {
+        console.error("TrackPlayer addToQueue error:", e);
+      }
+    }
+
+    // If no song is currently playing, start playing this song
+    if (!currentlyPlayingRef.current) {
+      await play(song);
+    }
   };
 
-  const removeFromQueue = (index: number) => {
+  const removeFromQueue = async (index: number) => {
     const newQueue = [...queueRef.current];
     if (index < 0 || index >= newQueue.length) return;
 
@@ -133,9 +273,18 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setQueue(newQueue);
     setCurrentIndex(nextIdx);
+
+    if (useNativeTrackPlayer) {
+      try {
+        const TrackPlayer = require('react-native-track-player').default;
+        await TrackPlayer.remove(index);
+      } catch (e) {
+        console.error("TrackPlayer removeFromQueue error:", e);
+      }
+    }
   };
 
-  const reorderQueue = (fromIndex: number, toIndex: number) => {
+  const reorderQueue = async (fromIndex: number, toIndex: number) => {
     const newQueue = [...queueRef.current];
     if (fromIndex < 0 || fromIndex >= newQueue.length || toIndex < 0 || toIndex >= newQueue.length) return;
 
@@ -155,11 +304,37 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setQueue(newQueue);
     setCurrentIndex(nextIdx);
+
+    if (useNativeTrackPlayer) {
+      try {
+        const TrackPlayer = require('react-native-track-player').default;
+        const tracks = newQueue.map(s => ({
+          id: s._id,
+          url: s.url,
+          title: s.title,
+          artist: 'Musiana Library',
+          artwork: s.imageUrl || '',
+          duration: parseFloat(s.duration) || 0,
+        }));
+        await TrackPlayer.setQueue(tracks);
+        await TrackPlayer.skip(nextIdx);
+      } catch (e) {
+        console.error("TrackPlayer reorderQueue error:", e);
+      }
+    }
   };
 
-  const clearQueue = () => {
+  const clearQueue = async () => {
     setQueue([]);
     setCurrentIndex(-1);
+    if (useNativeTrackPlayer) {
+      try {
+        const TrackPlayer = require('react-native-track-player').default;
+        await TrackPlayer.reset();
+      } catch (e) {
+        console.error("TrackPlayer clearQueue error:", e);
+      }
+    }
   };
 
   const toggleShuffle = () => {
@@ -187,7 +362,6 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (status.didJustFinish) {
         setIsPlaying(false);
         setPosition(0);
-        // Automatically play next song on completion
         playNext();
       }
     } else if (status.error) {
@@ -196,8 +370,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const play = async (song: Music, skipHistoryPush = false) => {
-    // Increment load ID to track this specific playback request
     const loadId = ++currentLoadIdRef.current;
+    userAddedCountRef.current = 0; // Reset user queue count on new track load
 
     try {
       console.log('🎵 Context: Playing song', song.title);
@@ -210,54 +384,70 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         newQueue.splice(insertIdx, 0, song);
         setQueue(newQueue);
         setCurrentIndex(insertIdx);
+        songIdx = insertIdx;
       } else {
         setCurrentIndex(songIdx);
       }
 
-      // Update playback history if playing a new song (and not going back via previous)
+      // Update playback history
       if (!skipHistoryPush && currentlyPlayingRef.current && currentlyPlayingRef.current._id !== song._id) {
         const updatedHistory = [...playbackHistoryRef.current, currentlyPlayingRef.current];
         setPlaybackHistoryState(updatedHistory);
         playbackHistoryRef.current = updatedHistory;
       }
 
-      // If there's an existing sound, stop and unload it first
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-        setSound(null);
-        soundRef.current = null;
+      if (useNativeTrackPlayer) {
+        const TrackPlayer = require('react-native-track-player').default;
+        const tracks = queueRef.current.map(s => ({
+          id: s._id,
+          url: s.url,
+          title: s.title,
+          artist: 'Musiana Library',
+          artwork: s.imageUrl || '',
+          duration: parseFloat(s.duration) || 0,
+        }));
+        await TrackPlayer.setQueue(tracks);
+        await TrackPlayer.skip(songIdx);
+        await TrackPlayer.play();
+        setCurrentlyPlaying(song);
+        currentlyPlayingRef.current = song;
+        setIsPlaying(true);
+      } else {
+        // Expo AV Fallback
+        if (soundRef.current) {
+          await soundRef.current.unloadAsync().catch(() => {});
+          setSound(null);
+          soundRef.current = null;
+        }
+
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          shouldRouteThroughEarpieceIOS: false,
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        } as any);
+
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: song.url },
+          { shouldPlay: true, progressUpdateIntervalMillis: 500 },
+          onPlaybackStatusUpdate
+        );
+
+        if (loadId !== currentLoadIdRef.current) {
+          await newSound.unloadAsync().catch(() => {});
+          return;
+        }
+
+        setSound(newSound);
+        soundRef.current = newSound;
+        setCurrentlyPlaying(song);
+        currentlyPlayingRef.current = song;
+        setIsPlaying(true);
       }
-
-      // Configure audio mode
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldRouteThroughEarpieceIOS: false,
-        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-        shouldDuckAndroid: false,
-        playThroughEarpieceAndroid: false,
-      } as any);
-
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: song.url },
-        { shouldPlay: true, progressUpdateIntervalMillis: 500 },
-        onPlaybackStatusUpdate
-      );
-
-      // Check if a newer play request was triggered while loading this song
-      if (loadId !== currentLoadIdRef.current) {
-        console.log(`⏩ Context: Play request for "${song.title}" was superseded, discarding.`);
-        await newSound.unloadAsync();
-        return;
-      }
-
-      setSound(newSound);
-      soundRef.current = newSound;
-      setCurrentlyPlaying(song);
-      currentlyPlayingRef.current = song;
-      setIsPlaying(true);
     } catch (error) {
       console.error('❌ Context: Play error', error);
     }
@@ -265,7 +455,11 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const pause = async () => {
     try {
-      if (soundRef.current && isPlaying) {
+      if (useNativeTrackPlayer) {
+        const TrackPlayer = require('react-native-track-player').default;
+        await TrackPlayer.pause();
+        setIsPlaying(false);
+      } else if (soundRef.current && isPlaying) {
         await soundRef.current.pauseAsync();
         setIsPlaying(false);
       }
@@ -276,7 +470,11 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const resume = async () => {
     try {
-      if (soundRef.current && !isPlaying) {
+      if (useNativeTrackPlayer) {
+        const TrackPlayer = require('react-native-track-player').default;
+        await TrackPlayer.play();
+        setIsPlaying(true);
+      } else if (soundRef.current && !isPlaying) {
         await soundRef.current.playAsync();
         setIsPlaying(true);
       }
@@ -287,7 +485,11 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const seek = async (positionMs: number) => {
     try {
-      if (soundRef.current) {
+      if (useNativeTrackPlayer) {
+        const TrackPlayer = require('react-native-track-player').default;
+        await TrackPlayer.seekTo(positionMs / 1000);
+        setPosition(positionMs);
+      } else if (soundRef.current) {
         await soundRef.current.setPositionAsync(positionMs);
         setPosition(positionMs);
       }
@@ -301,6 +503,16 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const currentIdx = currentIndexRef.current;
     
     if (q.length === 0) return;
+
+    if (useNativeTrackPlayer) {
+      try {
+        const TrackPlayer = require('react-native-track-player').default;
+        await TrackPlayer.skipToNext();
+      } catch (e) {
+        console.error("TrackPlayer playNext error:", e);
+      }
+      return;
+    }
 
     if (isLoopRef.current && currentIdx !== -1) {
       await seek(0);
@@ -329,6 +541,21 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const q = queueRef.current;
     const currentIdx = currentIndexRef.current;
     if (q.length === 0) return;
+
+    if (useNativeTrackPlayer) {
+      try {
+        const TrackPlayer = require('react-native-track-player').default;
+        if (position >= 3000) {
+          await TrackPlayer.seekTo(0);
+          setPosition(0);
+        } else {
+          await TrackPlayer.skipToPrevious();
+        }
+      } catch (e) {
+        console.error("TrackPlayer playPrevious error:", e);
+      }
+      return;
+    }
 
     if (position >= 3000) {
       await seek(0);
