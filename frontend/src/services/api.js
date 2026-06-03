@@ -1,8 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'http://192.168.29.92:3000/api';  // Local backend for Expo Go development
-// const API_URL = 'https://musiana-1e9c.onrender.com/api';  // Production (Render)
+// const API_URL = 'http://192.168.29.92:3000/api';  // Local backend for Expo Go development
+const API_URL = 'https://musiana-1e9c.onrender.com/api';  // Production (Render)
 
 export const api = {
   // Trigger on-demand download of a song preview (requires authentication)
