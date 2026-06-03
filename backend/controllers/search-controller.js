@@ -1,4 +1,4 @@
-const { downloadStates, downloadAndUpload } = require('../helpers/downloader');
+const { downloadStates, downloadAndUpload, fetchYouTubeMetadata, fetchMultipleYouTubeMetadata } = require('../helpers/downloader');
 const Music = require('../models/Music');
 
 /**
@@ -145,25 +145,42 @@ const searchMusic = async (req, res) => {
       }
     }
 
-    // Trigger download process asynchronously
-    downloadAndUpload(cleanQuery);
+    const includePreview = req.query.includePreview === 'true';
+    let previews = [];
+
+    if (includePreview) {
+      // Fetch multiple YouTube metadata previews (top 5 options)
+      const metadataList = await fetchMultipleYouTubeMetadata(cleanQuery, 5);
+      if (metadataList && metadataList.length > 0) {
+        previews = metadataList.map(metadata => ({
+          _id: `preview-${metadata.videoId}`,
+          title: metadata.title,
+          imageUrl: metadata.thumbnailUrl,
+          query: cleanQuery,
+          videoId: metadata.videoId,
+          isPreview: true
+        }));
+      }
+    }
 
     if (type === 'both' || type === 'songs') {
-      return res.status(202).json({
+      return res.status(200).json({
         success: true,
-        downloading: true,
-        status: 'searching',
-        progress: 0,
-        data: { songs: [], playlists },
-        message: `Searching the cloud and downloading "${cleanQuery}"... This will take a few moments.`
+        downloading: false,
+        data: {
+          songs: [],
+          playlists,
+          previews
+        }
       });
     } else {
-      return res.status(202).json({
+      return res.status(200).json({
         success: true,
-        downloading: true,
-        status: 'searching',
-        progress: 0,
-        message: `Searching the cloud and downloading "${cleanQuery}"... This will take a few moments.`
+        downloading: false,
+        data: {
+          songs: [],
+          previews
+        }
       });
     }
 
@@ -177,6 +194,80 @@ const searchMusic = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/search/download
+ */
+const triggerDownload = async (req, res) => {
+  try {
+    const { query, videoId, title, imageUrl } = req.body;
+
+    if (!query || query.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Query parameter "query" is required in request body'
+      });
+    }
+
+    const cleanQuery = query.trim();
+    const cleanQueryLower = cleanQuery.toLowerCase();
+
+    // Check if song already exists in DB by title (if title is provided) or by query
+    let existing = null;
+    if (title) {
+      existing = await Music.findOne({ title });
+    }
+    if (!existing) {
+      existing = await Music.findOne({
+        $or: [
+          { title: { $regex: cleanQuery, $options: 'i' } },
+          { searchQueries: cleanQueryLower }
+        ]
+      });
+    }
+
+    if (existing) {
+      return res.status(200).json({
+        success: true,
+        downloading: false,
+        data: existing,
+        message: 'Song already available'
+      });
+    }
+
+    // Check if already downloading
+    const activeState = downloadStates.get(cleanQueryLower);
+    if (activeState && activeState.status !== 'failed') {
+      return res.status(200).json({
+        success: true,
+        downloading: true,
+        status: activeState.status,
+        progress: activeState.progress,
+        message: `Download already in progress`
+      });
+    }
+
+    // Trigger download asynchronously, passing video details
+    downloadAndUpload(cleanQuery, videoId, title, imageUrl);
+
+    return res.status(202).json({
+      success: true,
+      downloading: true,
+      status: 'searching',
+      progress: 0,
+      message: `Searching the cloud and downloading "${cleanQuery}"... This will take a few moments.`
+    });
+
+  } catch (error) {
+    console.error('❌ Trigger Download Controller Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
-  searchMusic
+  searchMusic,
+  triggerDownload
 };

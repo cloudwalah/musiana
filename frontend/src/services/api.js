@@ -1,10 +1,31 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// const API_URL = 'http://192.168.29.92:3000/api';  // Local backend for Expo Go development
-const API_URL = 'https://musiana-1e9c.onrender.com/api';  // Production (Render)
+const API_URL = 'http://192.168.29.92:3000/api';  // Local backend for Expo Go development
+// const API_URL = 'https://musiana-1e9c.onrender.com/api';  // Production (Render)
 
 export const api = {
+  // Trigger on-demand download of a song preview (requires authentication)
+  startDownload: async (query, videoId = null, title = null, imageUrl = null) => {
+    const token = await AsyncStorage.getItem('token');
+    
+    console.log('🚀 Starting download of preview...');
+    console.log('📍 API URL:', `${API_URL}/search/download`);
+    
+    const response = await axios.post(`${API_URL}/search/download`, {
+      query,
+      videoId,
+      title,
+      imageUrl
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    console.log('✅ Start download response:', response.data);
+    return response.data;
+  },
   // Register new user
   register: async (userName, email, password, role = 'user') => {
     console.log('🚀 Attempting registration...');
@@ -56,7 +77,7 @@ export const api = {
   },
 
   // Search music by query (requires authentication)
-  searchMusic: async (query, type = 'songs') => {
+  searchMusic: async (query, type = 'songs', includePreview = false) => {
     const token = await AsyncStorage.getItem('token');
     
     console.log('🚀 Searching music...');
@@ -64,7 +85,7 @@ export const api = {
     console.log('🔑 Token:', token ? 'Present' : 'Missing');
     
     const response = await axios.get(`${API_URL}/search`, {
-      params: { q: query, type },
+      params: { q: query, type, includePreview },
       headers: {
         'Authorization': `Bearer ${token}`
       }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, BackHandler, TouchableWithoutFeedback, Animated, Easing, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity, TextInput, Dimensions, Image, Modal, BackHandler, TouchableWithoutFeedback, Animated, Easing, ScrollView, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -113,6 +113,18 @@ export default function HomeScreen() {
   const [downloadMessage, setDownloadMessage] = useState('');
   const [pollingIntervalId, setPollingIntervalId] = useState<any>(null);
   const [isUnavailable, setIsUnavailable] = useState(false);
+  const [displayProgress, setDisplayProgress] = useState(0);
+  const [downloadStatus, setDownloadStatus] = useState('searching');
+  const [getSongLoading, setGetSongLoading] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewSong, setPreviewSong] = useState<any | null>(null);
+  const [searchPreviews, setSearchPreviews] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Progress animation refs
+  const progressAnimationFinishedRef = useRef(false);
+  const animationIntervalRef = useRef<any>(null);
+  const actualDisplayProgressRef = useRef(0);
   
   // Profile & User States
   const [user, setUser] = useState<{ username: string; email: string; role?: string } | null>(null);
@@ -223,11 +235,14 @@ export default function HomeScreen() {
     }, [selectedPlaylist?._id])
   );
 
-  // Cleanup polling interval on unmount
+  // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
       if (pollingIntervalId) {
         clearInterval(pollingIntervalId);
+      }
+      if (animationIntervalRef.current) {
+        clearInterval(animationIntervalRef.current);
       }
     };
   }, [pollingIntervalId]);
@@ -263,23 +278,76 @@ export default function HomeScreen() {
     }
   };
 
+  const calculateDisplayProgress = (status: string, progress: number): number => {
+    if (status === 'success') return 100;
+    if (status === 'failed') return 0;
+    if (status === 'uploading') return 95;
+    if (status === 'downloading') {
+      const p = progress || 0;
+      return Math.round(57 + p * 0.33); // Map 0-100% download progress to 57-90% display progress
+    }
+    return 57; // Default initial background target
+  };
+
+  const startProgressAnimation = () => {
+    if (animationIntervalRef.current) {
+      clearInterval(animationIntervalRef.current);
+    }
+    
+    progressAnimationFinishedRef.current = false;
+    setDisplayProgress(0);
+    actualDisplayProgressRef.current = 57;
+
+    let currentVal = 0;
+    animationIntervalRef.current = setInterval(() => {
+      currentVal += 1;
+      if (currentVal >= 57) {
+        clearInterval(animationIntervalRef.current);
+        animationIntervalRef.current = null;
+        progressAnimationFinishedRef.current = true;
+        // Catch up immediately to actual progress if polled
+        setDisplayProgress(actualDisplayProgressRef.current);
+      } else {
+        setDisplayProgress(currentVal);
+      }
+    }, 49); // 49ms * 57 = 2793ms (approx. 2.8 seconds)
+  };
+
+  const updateProgressState = (status: string, progress: number) => {
+    const actualVal = calculateDisplayProgress(status, progress);
+    actualDisplayProgressRef.current = actualVal;
+    if (progressAnimationFinishedRef.current) {
+      setDisplayProgress(actualVal);
+    }
+  };
+
   const startPolling = (query: string) => {
     const intervalId = setInterval(async () => {
       try {
         console.log(`⏳ Polling search for: "${query}"...`);
-        const response = await api.searchMusic(query, searchType);
+        const response = await api.searchMusic(query, searchType, false);
         if (response.success && !response.downloading) {
           console.log(`✅ Polling complete! Song downloaded.`);
           clearInterval(intervalId);
           setPollingIntervalId(null);
           
+          if (animationIntervalRef.current) {
+            clearInterval(animationIntervalRef.current);
+            animationIntervalRef.current = null;
+          }
+          
+          progressAnimationFinishedRef.current = true;
           setIsDownloading(false);
           setSearchLoading(false);
           setIsUnavailable(false);
+          setDisplayProgress(100);
           
           if (response.data && response.data.playlists) {
             setSearchResultsPlaylists(response.data.playlists);
           }
+          
+          // Clear preview since it is now in library
+          setSearchPreviews([]);
           
           // Refresh general library
           fetchMusic();
@@ -287,13 +355,24 @@ export default function HomeScreen() {
           if (response.message) {
             setDownloadMessage(response.message);
           }
+          updateProgressState(response.status || 'searching', response.progress || 0);
+          if (response.status) {
+            setDownloadStatus(response.status);
+          }
         } else {
           console.log(`❌ Download failed for: "${query}"`);
           clearInterval(intervalId);
           setPollingIntervalId(null);
+          
+          if (animationIntervalRef.current) {
+            clearInterval(animationIntervalRef.current);
+            animationIntervalRef.current = null;
+          }
+          
           setIsDownloading(false);
           setSearchLoading(false);
           setIsUnavailable(true);
+          showFeedback('Download Failed', `"${query}" could not be downloaded. Please try again.`, true);
         }
       } catch (err) {
         console.log('Error during search polling:', err);
@@ -314,16 +393,25 @@ export default function HomeScreen() {
     setDownloadMessage('');
     setIsUnavailable(false);
     setSearchResultsPlaylists([]);
+    setSearchPreviews([]);
     
     try {
-      const response = await api.searchMusic(searchQuery, searchType);
+      const response = await api.searchMusic(searchQuery, searchType, false); // initial search does not include preview
       if (response.success) {
-        if (response.data && response.data.playlists) {
-          setSearchResultsPlaylists(response.data.playlists);
+        if (response.data) {
+          if (response.data.playlists) {
+            setSearchResultsPlaylists(response.data.playlists);
+          }
+          if (response.data.previews) {
+            setSearchPreviews(response.data.previews);
+          }
         }
         
         if (response.downloading) {
           setIsDownloading(true);
+          startProgressAnimation(); // Start the 0-57% animation
+          updateProgressState(response.status || 'searching', response.progress || 0);
+          setDownloadStatus(response.status || 'searching');
           setDownloadMessage(response.message || 'Downloading your song... Please wait.');
           startPolling(searchQuery);
         } else {
@@ -341,6 +429,82 @@ export default function HomeScreen() {
       setIsDownloading(false);
       setSearchLoading(false);
       setIsUnavailable(true);
+    }
+  };
+
+  const handleGetSongPreview = async () => {
+    if (!searchQuery.trim()) {
+      return;
+    }
+    
+    setGetSongLoading(true);
+    setIsUnavailable(false);
+    setSearchPreviews([]);
+    
+    try {
+      const response = await api.searchMusic(searchQuery, searchType, true); // get preview from cloud on button click
+      if (response.success) {
+        if (response.data) {
+          if (response.data.previews) {
+            setSearchPreviews(response.data.previews);
+          } else {
+            setIsUnavailable(true);
+          }
+        } else {
+          setIsUnavailable(true);
+        }
+      } else {
+        setIsUnavailable(true);
+      }
+    } catch (error: any) {
+      console.log('❌ Get Song Preview Error:', error);
+      setIsUnavailable(true);
+    } finally {
+      setGetSongLoading(false);
+    }
+  };
+
+  const handlePreviewPress = (item: any) => {
+    setPreviewSong(item);
+    setShowPreviewModal(true);
+  };
+
+  const handleGetSongFromPreview = async () => {
+    if (!previewSong) return;
+    setShowPreviewModal(false);
+    
+    setIsDownloading(true);
+    startProgressAnimation(); // Start the 0-57% animation instantly
+    setDownloadStatus('searching');
+    setDownloadMessage('Initiating download...');
+    
+    try {
+      const response = await api.startDownload(
+        previewSong.query,
+        previewSong.videoId,
+        previewSong.title,
+        previewSong.imageUrl
+      );
+      if (response.success) {
+        updateProgressState(response.status || 'searching', response.progress || 0);
+        if (response.status) setDownloadStatus(response.status);
+        startPolling(previewSong.query);
+      } else {
+        if (animationIntervalRef.current) {
+          clearInterval(animationIntervalRef.current);
+          animationIntervalRef.current = null;
+        }
+        setIsDownloading(false);
+        showFeedback('Error', 'Failed to initiate download.', true);
+      }
+    } catch (err: any) {
+      console.log('Error initiating download:', err);
+      if (animationIntervalRef.current) {
+        clearInterval(animationIntervalRef.current);
+        animationIntervalRef.current = null;
+      }
+      setIsDownloading(false);
+      showFeedback('Error', err.response?.data?.message || 'Failed to initiate download.', true);
     }
   };
 
@@ -466,6 +630,12 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchMusic();
+    setRefreshing(false);
   };
 
   const handleLogout = async () => {
@@ -623,6 +793,7 @@ export default function HomeScreen() {
   const renderMusicItem = ({ item }: { item: Music }) => {
     const isCurrentTrack = currentlyPlaying?._id === item._id;
     const isCurrentPlaying = isCurrentTrack && isPlaying;
+    const isPreview = (item as any).isPreview;
     
     return (
       <TouchableOpacity 
@@ -630,7 +801,13 @@ export default function HomeScreen() {
           styles.gridBox,
           isCurrentTrack && styles.musicBoxPlaying
         ]} 
-        onPress={() => handleRowPress(item)}
+        onPress={() => {
+          if (isPreview) {
+            handlePreviewPress(item);
+          } else {
+            handleRowPress(item);
+          }
+        }}
       >
         <View style={styles.gridCover}>
           {item.imageUrl ? (
@@ -638,28 +815,34 @@ export default function HomeScreen() {
           ) : (
             <Ionicons name="musical-notes-outline" size={40} color="#fff" />
           )}
-          <TouchableOpacity 
-            style={styles.gridPlayButton}
-            onPress={() => handlePlayIconPress(item)}
-          >
-            <Ionicons 
-              name={isCurrentPlaying ? 'pause' : 'play'} 
-              size={18} 
-              color="#BDB4FF" 
-              style={isCurrentPlaying ? null : { marginLeft: 2 }}
-            />
-          </TouchableOpacity>
+          {!isPreview && (
+            <TouchableOpacity 
+              style={styles.gridPlayButton}
+              onPress={() => handlePlayIconPress(item)}
+            >
+              <Ionicons 
+                name={isCurrentPlaying ? 'pause' : 'play'} 
+                size={18} 
+                color="#BDB4FF" 
+                style={isCurrentPlaying ? null : { marginLeft: 2 }}
+              />
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.gridInfo}>
           <Text style={styles.gridTitle} numberOfLines={1}>{item.title}</Text>
           <View style={styles.gridDetailsRow}>
-            <Text style={styles.gridDuration}>⏱ {item.duration}</Text>
-            <TouchableOpacity 
-              style={styles.gridQueueButton}
-              onPress={() => addToQueue(item)}
-            >
-              <Ionicons name="add-circle-outline" size={18} color="#BDB4FF" />
-            </TouchableOpacity>
+            {isPreview ? null : (
+              <>
+                <Text style={styles.gridDuration}>⏱ {item.duration}</Text>
+                <TouchableOpacity 
+                  style={styles.gridQueueButton}
+                  onPress={() => addToQueue(item)}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#BDB4FF" />
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -921,11 +1104,20 @@ export default function HomeScreen() {
   };
 
   const renderSongsTab = () => {
-    const filteredMusic = musicList.filter(song =>
+    let filteredMusic = musicList.filter(song =>
       song.title.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const displayList = isSearching && searchQuery.trim() !== '' ? filteredMusic : musicList;
+    if (isSearching && searchQuery.trim() !== '' && searchPreviews && searchPreviews.length > 0) {
+      const previewCards = searchPreviews.filter(
+        preview => !filteredMusic.some(s => s.title.toLowerCase() === preview.title.toLowerCase())
+      );
+      filteredMusic = [...previewCards, ...filteredMusic];
+    }
+
+    const displayList = isSearching && searchQuery.trim() !== ''
+      ? filteredMusic.filter(s => !(s as any).isPreview)
+      : musicList;
 
     return (
       <View style={styles.tabContentContainer}>
@@ -976,31 +1168,38 @@ export default function HomeScreen() {
               renderItem={renderMusicItem}
               keyExtractor={(item) => item._id}
               ListEmptyComponent={
-                searchLoading || isDownloading ? (
+                searchLoading ? (
                   <View style={styles.emptyContainer}>
                     <ActivityIndicator size="large" color="#8B5CF6" />
-                    <Text style={styles.loadingStatusText}>
-                      {isDownloading ? downloadMessage : 'Searching database...'}
-                    </Text>
                   </View>
                 ) : isUnavailable ? (
                   <View style={styles.emptyContainer}>
                     <Ionicons name="alert-circle-outline" size={60} color="#FF3B30" style={{ marginBottom: 15 }} />
-                    <Text style={styles.emptyTextTitle}>Song not available</Text>
+                    <Text style={styles.emptyTextTitle}>Song not found</Text>
                     <Text style={styles.emptyTextSubtitle}>
-                      &quot;{searchQuery}&quot; could not be downloaded from the cloud.
+                      &quot;{searchQuery}&quot; was not found on the cloud.
                     </Text>
                   </View>
                 ) : (
                   <View style={styles.emptyContainer}>
-                    <Ionicons name="cloud-download-outline" size={60} color="#7C7899" style={{ marginBottom: 15 }} />
-                    <Text style={styles.emptyTextTitle}>Song not in library</Text>
+                    <Ionicons name="alert-circle-outline" size={60} color="#7C7899" style={{ marginBottom: 15 }} />
+                    <Text style={styles.emptyTextTitle}>Song not found</Text>
                     <Text style={styles.emptyTextSubtitle}>
-                      &quot;{searchQuery}&quot; is not in your library. Download it from the cloud?
+                      &quot;{searchQuery}&quot; was not found in the database.
                     </Text>
-                    <TouchableOpacity style={styles.getSongButton} onPress={handleSearchSubmit}>
-                      <Ionicons name="download-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-                      <Text style={styles.getSongButtonText}>Get the Song</Text>
+                    <TouchableOpacity 
+                      style={styles.getSongButton} 
+                      onPress={handleGetSongPreview}
+                      disabled={getSongLoading}
+                    >
+                      {getSongLoading ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="download-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                          <Text style={styles.getSongButtonText}>Get the Song</Text>
+                        </>
+                      )}
                     </TouchableOpacity>
                   </View>
                 )
@@ -1101,6 +1300,14 @@ export default function HomeScreen() {
               currentlyPlaying ? { paddingBottom: 160 } : { paddingBottom: 80 }
             ]}
             columnWrapperStyle={musicList.length > 0 ? styles.gridRow : null}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#8B5CF6"
+                colors={["#8B5CF6"]}
+              />
+            }
           />
         )}
       </View>
@@ -1956,6 +2163,80 @@ export default function HomeScreen() {
             </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Custom Preview Modal */}
+      <Modal
+        visible={showPreviewModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowPreviewModal(false);
+          setPreviewSong(null);
+        }}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setShowPreviewModal(false);
+            setPreviewSong(null);
+          }}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              {/* Close/Cross Icon at Top Right */}
+              <TouchableOpacity
+                style={styles.modalCloseIcon}
+                onPress={() => {
+                  setShowPreviewModal(false);
+                  setPreviewSong(null);
+                }}
+              >
+                <Ionicons name="close" size={24} color="#7C7899" />
+              </TouchableOpacity>
+
+              <Text style={styles.confirmModalTitle}>Add Song?</Text>
+              <Text style={[styles.confirmModalSub, { marginBottom: 24, paddingHorizontal: 10 }]}>
+                &quot;{previewSong?.title}&quot; is not currently available.
+              </Text>
+              <TouchableOpacity
+                style={styles.confirmSingleGetBtn}
+                onPress={handleGetSongFromPreview}
+              >
+                <Text style={styles.confirmGetText}>Get Song</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Custom Download Progress Modal */}
+      <Modal
+        visible={isDownloading}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          // Modal is persistent until success/fail
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={styles.confirmModalContainer}>
+              <ActivityIndicator size="large" color="#8B5CF6" style={{ marginBottom: 16 }} />
+              <Text style={styles.confirmModalTitle}>Adding your song</Text>
+              
+              {/* Progress Bar Track */}
+              <View style={styles.downloadProgressBarBg}>
+                <View style={[styles.downloadProgressBarActive, { width: `${Math.min(100, Math.max(0, displayProgress || 0))}%` }]} />
+              </View>
+              
+              <Text style={styles.downloadProgressText}>
+                {displayProgress}%
+              </Text>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
       </Modal>
     </View>
   );
@@ -3035,5 +3316,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#332354',
+  },
+  confirmGetBtn: {
+    flex: 0.46,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmGetText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  downloadProgressBarBg: {
+    width: '100%',
+    height: 6,
+    backgroundColor: '#332354',
+    borderRadius: 3,
+    marginTop: 12,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  downloadProgressBarActive: {
+    height: '100%',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 3,
+  },
+  downloadProgressText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  modalCloseIcon: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 10,
+  },
+  confirmSingleGetBtn: {
+    width: '100%',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
   },
 });

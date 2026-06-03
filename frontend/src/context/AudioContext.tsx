@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Audio, AVPlaybackStatus, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
+import { NativeModules } from 'react-native';
+
+const isTrackPlayerSupported = !!NativeModules.TrackPlayerModule;
 
 export interface Music {
   _id: string;
@@ -105,6 +108,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     let eventListeners: any[] = [];
     
     const initTrackPlayer = async () => {
+      if (!isTrackPlayerSupported) {
+        if (active) {
+          setUseNativeTrackPlayer(false);
+          useNativeTrackPlayerRef.current = false;
+        }
+        return;
+      }
       try {
         const TrackPlayer = require('react-native-track-player').default;
         const { Capability, Event, State } = require('react-native-track-player');

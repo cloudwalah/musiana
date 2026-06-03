@@ -58,7 +58,7 @@ const downloadStates = new Map();
  * Background worker to download audio from YouTube, upload to Cloudinary, and save to MongoDB
  * @param {string} query 
  */
-const downloadAndUpload = async (query) => {
+const downloadAndUpload = async (query, resolvedVideoId = null, resolvedTitle = null, resolvedImageUrl = null) => {
   const cleanQuery = query.trim().toLowerCase();
   
   if (downloadStates.has(cleanQuery)) {
@@ -76,24 +76,30 @@ const downloadAndUpload = async (query) => {
     timestamp: Date.now()
   });
   
-  console.log(`📥 Downloader started for query: "${query}"`);
+  console.log(`📥 Downloader started for query: "${query}" (Video ID: ${resolvedVideoId})`);
 
   let tempFile = '';
 
   try {
-    // 1. Search YouTube and extract metadata (title, video id, thumbnail URL)
-    console.log(`🔍 Searching YouTube for: "${query}"`);
-    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : '';
-    const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --js-runtimes node --remote-components ejs:github --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch1:${query}"`);
-    
-    const parts = stdout.trim().split('###');
-    if (parts.length < 3) {
-      throw new Error('Failed to parse metadata from search results');
-    }
+    let title = resolvedTitle;
+    let videoId = resolvedVideoId;
+    let thumbnailUrl = resolvedImageUrl;
 
-    const title = parts[0].trim();
-    const videoId = parts[1].trim();
-    const thumbnailUrl = parts[2].trim();
+    // 1. Search YouTube if videoId was not passed directly
+    if (!videoId) {
+      console.log(`🔍 Searching YouTube for: "${query}"`);
+      const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : '';
+      const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --js-runtimes node --remote-components ejs:github --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch1:${query}"`);
+      
+      const parts = stdout.trim().split('###');
+      if (parts.length < 3) {
+        throw new Error('Failed to parse metadata from search results');
+      }
+
+      title = parts[0].trim();
+      videoId = parts[1].trim();
+      thumbnailUrl = parts[2].trim();
+    }
 
     console.log(`🎵 Found on YouTube: "${title}" (ID: ${videoId})`);
 
@@ -294,7 +300,53 @@ const downloadAndUpload = async (query) => {
   }
 };
 
+const fetchYouTubeMetadata = async (query) => {
+  try {
+    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : '';
+    const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --js-runtimes node --remote-components ejs:github --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch1:${query}"`);
+    
+    const parts = stdout.trim().split('###');
+    if (parts.length < 3) {
+      return null;
+    }
+    return {
+      title: parts[0].trim(),
+      videoId: parts[1].trim(),
+      thumbnailUrl: parts[2].trim()
+    };
+  } catch (error) {
+    console.error(`❌ Error fetching YouTube metadata for query "${query}":`, error.message);
+    return null;
+  }
+};
+
+const fetchMultipleYouTubeMetadata = async (query, count = 5) => {
+  try {
+    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : '';
+    const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --js-runtimes node --remote-components ejs:github --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch${count}:${query}"`);
+    
+    const lines = stdout.trim().split('\n').filter(Boolean);
+    const results = [];
+    for (const line of lines) {
+      const parts = line.split('###');
+      if (parts.length >= 3) {
+        results.push({
+          title: parts[0].trim(),
+          videoId: parts[1].trim(),
+          thumbnailUrl: parts[2].trim()
+        });
+      }
+    }
+    return results;
+  } catch (error) {
+    console.error(`❌ Error fetching multiple YouTube metadata for query "${query}":`, error.message);
+    return [];
+  }
+};
+
 module.exports = {
   downloadStates,
-  downloadAndUpload
+  downloadAndUpload,
+  fetchYouTubeMetadata,
+  fetchMultipleYouTubeMetadata
 };
