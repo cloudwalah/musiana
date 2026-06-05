@@ -27,7 +27,10 @@
       "predictiveBackGestureEnabled": false,
       "package": "musiana.android",
       "permissions": [
-        "AUDIO_FOCUS"
+        "AUDIO_FOCUS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
