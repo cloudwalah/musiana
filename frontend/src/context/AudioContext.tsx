@@ -95,7 +95,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       if (useNativeTrackPlayerRef.current) {
         try {
-          const TrackPlayer = require('react-native-track-player').default;
+          const TrackPlayer = require('@rntp/player').default;
           TrackPlayer.destroy().catch(() => {});
         } catch (e) {}
       }
@@ -116,8 +116,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return;
       }
       try {
-        const TrackPlayer = require('react-native-track-player').default;
-        const { Capability, Event, State } = require('react-native-track-player');
+        const TrackPlayer = require('@rntp/player').default;
+        const { Capability, Event, State } = require('@rntp/player');
         
         await TrackPlayer.setupPlayer();
         await TrackPlayer.updateOptions({
@@ -188,8 +188,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('react-native-track-player').default;
-        const { RepeatMode } = require('react-native-track-player');
+        const TrackPlayer = require('@rntp/player').default;
+        const { RepeatMode } = require('@rntp/player');
         TrackPlayer.setRepeatMode(isLoop ? RepeatMode.Track : RepeatMode.Queue);
       } catch (e) {
         console.error("Failed to sync loop mode to TrackPlayer:", e);
@@ -203,7 +203,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (isPlaying && useNativeTrackPlayer) {
       interval = setInterval(async () => {
         try {
-          const TrackPlayer = require('react-native-track-player').default;
+          const TrackPlayer = require('@rntp/player').default;
           const pos = await TrackPlayer.getPosition();
           const dur = await TrackPlayer.getDuration();
           setPosition(pos * 1000); // convert seconds to ms
@@ -247,7 +247,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         const track = {
           id: song._id,
           url: song.url,
@@ -286,7 +286,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         await TrackPlayer.remove(index);
       } catch (e) {
         console.error("TrackPlayer removeFromQueue error:", e);
@@ -317,7 +317,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         const tracks = newQueue.map(s => ({
           id: s._id,
           url: s.url,
@@ -339,7 +339,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCurrentIndex(-1);
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         await TrackPlayer.reset();
       } catch (e) {
         console.error("TrackPlayer clearQueue error:", e);
@@ -407,7 +407,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       if (useNativeTrackPlayer) {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         const tracks = queueRef.current.map(s => ({
           id: s._id,
           url: s.url,
@@ -466,7 +466,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const pause = async () => {
     try {
       if (useNativeTrackPlayer) {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         await TrackPlayer.pause();
         setIsPlaying(false);
       } else if (soundRef.current && isPlaying) {
@@ -481,7 +481,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const resume = async () => {
     try {
       if (useNativeTrackPlayer) {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         await TrackPlayer.play();
         setIsPlaying(true);
       } else if (soundRef.current && !isPlaying) {
@@ -496,7 +496,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const seek = async (positionMs: number) => {
     try {
       if (useNativeTrackPlayer) {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         await TrackPlayer.seekTo(positionMs / 1000);
         setPosition(positionMs);
       } else if (soundRef.current) {
@@ -516,7 +516,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         await TrackPlayer.skipToNext();
       } catch (e) {
         console.error("TrackPlayer playNext error:", e);
@@ -554,7 +554,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('react-native-track-player').default;
+        const TrackPlayer = require('@rntp/player').default;
         if (position >= 3000) {
           await TrackPlayer.seekTo(0);
           setPosition(0);

@@ -1,7 +1,7 @@
 module.exports = async function () {
   try {
-    const TrackPlayer = require('react-native-track-player').default;
-    const { Event } = require('react-native-track-player');
+    const TrackPlayer = require('@rntp/player').default;
+    const { Event } = require('@rntp/player');
     
     TrackPlayer.addEventListener(Event.RemotePlay, () => TrackPlayer.play());
     TrackPlayer.addEventListener(Event.RemotePause, () => TrackPlayer.pause());

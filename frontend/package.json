@@ -8,8 +8,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint",
-    "postinstall": "patch-package"
+    "lint": "expo lint"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -19,6 +18,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.26",
     "@react-navigation/native-stack": "^7.9.0",
+    "@rntp/player": "^5.4.0",
     "axios": "^1.13.2",
     "expo": "~54.0.30",
     "expo-av": "~16.0.8",
@@ -41,10 +41,9 @@
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-paper": "^5.14.5",
-    "react-native-reanimated": "^3.16.2",
+    "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-track-player": "^4.1.2",
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@ const isTrackPlayerSupported = !!NativeModules.TrackPlayerModule;
 
 if (isTrackPlayerSupported) {
   try {
-    const TrackPlayer = require('react-native-track-player').default;
+    const TrackPlayer = require('@rntp/player').default;
     TrackPlayer.registerPlaybackService(() => require('../track-player-services'));
   } catch (e) {
     console.log("TrackPlayer playback service registration failed:", e);
