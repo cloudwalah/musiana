@@ -8,7 +8,7 @@ const isTrackPlayerSupported = isTurboModuleEnabled || !!NativeModules.TrackPlay
 
 if (isTrackPlayerSupported) {
   try {
-    const TrackPlayer = require('@rntp/player').default;
+    const TrackPlayer = require('@rntp/player');
     // V5 uses registerBackgroundEventHandler instead of registerPlaybackService
     TrackPlayer.registerBackgroundEventHandler(() => require('../track-player-services'));
   } catch (e) {
