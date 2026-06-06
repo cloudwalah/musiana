@@ -9,12 +9,13 @@ const isTrackPlayerSupported = isTurboModuleEnabled || !!NativeModules.TrackPlay
 if (isTrackPlayerSupported) {
   try {
     const TrackPlayer = require('@rntp/player').default;
-    TrackPlayer.registerPlaybackService(() => require('../track-player-services'));
+    // V5 uses registerBackgroundEventHandler instead of registerPlaybackService
+    TrackPlayer.registerBackgroundEventHandler(() => require('../track-player-services'));
   } catch (e) {
-    console.log("TrackPlayer playback service registration failed:", e);
+    console.log("TrackPlayer background event handler registration failed:", e);
   }
 } else {
-  console.log("TrackPlayer playback service skipped (running in Expo Go)");
+  console.log("TrackPlayer skipped (running in Expo Go)");
 }
 
 export default function RootLayout() {

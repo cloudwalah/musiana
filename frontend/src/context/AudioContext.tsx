@@ -119,7 +119,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       try {
         const TrackPlayer = require('@rntp/player').default;
-        const { Capability, Event, State } = require('@rntp/player');
+        const { Event, PlayerCommand } = require('@rntp/player');
         
         if (Platform.OS === 'android' && Platform.Version >= 33) {
           try {
@@ -129,57 +129,53 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
         }
         
-        await TrackPlayer.setupPlayer();
-        await TrackPlayer.updateOptions({
-          notificationCapabilities: [
-            Capability.Play,
-            Capability.Pause,
-            Capability.SkipToNext,
-            Capability.SkipToPrevious,
-            Capability.SeekTo,
-          ],
+        // V5: setupPlayer is synchronous
+        TrackPlayer.setupPlayer({
+          contentType: 'music',
+          handleAudioBecomingNoisy: true,
+          android: {
+            wakeMode: 'network',
+          },
+        });
+
+        // V5: setCommands replaces updateOptions for notification/lockscreen controls
+        TrackPlayer.setCommands({
           capabilities: [
-            Capability.Play,
-            Capability.Pause,
-            Capability.SkipToNext,
-            Capability.SkipToPrevious,
-            Capability.SeekTo,
-          ],
-          compactCapabilities: [
-            Capability.Play,
-            Capability.Pause,
-            Capability.SkipToNext,
-            Capability.SkipToPrevious,
+            PlayerCommand.PlayPause,
+            PlayerCommand.Next,
+            PlayerCommand.Previous,
+            PlayerCommand.Seek,
           ],
         });
         
         if (active) {
           setUseNativeTrackPlayer(true);
           useNativeTrackPlayerRef.current = true;
-          console.log("✅ Native TrackPlayer is available and configured.");
+          console.log("✅ Native TrackPlayer V5 is available and configured.");
         }
 
-        // Add event listeners for TrackPlayer events
-        const activeTrackListener = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (event: any) => {
-          const index = event.index;
-          if (index !== undefined && index !== null && active) {
-            const q = queueRef.current;
-            if (index >= 0 && index < q.length) {
-              const matchedSong = q[index];
-              setCurrentlyPlaying(matchedSong);
-              currentlyPlayingRef.current = matchedSong;
-              setCurrentIndex(index);
-              // Reset manual user queue count on track change
-              userAddedCountRef.current = 0;
+        // V5: MediaItemTransition replaces PlaybackActiveTrackChanged
+        const activeTrackListener = TrackPlayer.addEventListener(Event.MediaItemTransition, async (event: any) => {
+          if (active) {
+            const index = TrackPlayer.getActiveMediaItemIndex();
+            if (index !== undefined && index !== null) {
+              const q = queueRef.current;
+              if (index >= 0 && index < q.length) {
+                const matchedSong = q[index];
+                setCurrentlyPlaying(matchedSong);
+                currentlyPlayingRef.current = matchedSong;
+                setCurrentIndex(index);
+                userAddedCountRef.current = 0;
+              }
             }
           }
         });
         eventListeners.push(activeTrackListener);
 
-        const playbackStateListener = TrackPlayer.addEventListener(Event.PlaybackState, (event: any) => {
+        // V5: IsPlayingChanged replaces PlaybackState
+        const playbackStateListener = TrackPlayer.addEventListener(Event.IsPlayingChanged, (event: any) => {
           if (active) {
-            const isPlayingState = event.state === State.Playing || event.state === 'playing';
-            setIsPlaying(isPlayingState);
+            setIsPlaying(event.isPlaying);
           }
         });
         eventListeners.push(playbackStateListener);
@@ -218,13 +214,12 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     let interval: any;
     if (isPlaying && useNativeTrackPlayer) {
-      interval = setInterval(async () => {
+      interval = setInterval(() => {
         try {
           const TrackPlayer = require('@rntp/player').default;
-          const pos = await TrackPlayer.getPosition();
-          const dur = await TrackPlayer.getDuration();
-          setPosition(pos * 1000); // convert seconds to ms
-          setDuration(dur * 1000);
+          const progress = TrackPlayer.getProgress();
+          setPosition(progress.position * 1000); // convert seconds to ms
+          setDuration(progress.duration * 1000);
         } catch (e) {
           // ignore
         }
@@ -265,15 +260,15 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (useNativeTrackPlayer) {
       try {
         const TrackPlayer = require('@rntp/player').default;
-        const track = {
-          id: song._id,
+        const mediaItem = {
+          mediaId: song._id,
           url: song.url,
           title: song.title,
           artist: 'Musiana Library',
-          artwork: song.imageUrl || '',
+          artworkUrl: song.imageUrl || undefined,
           duration: parseFloat(song.duration) || 0,
         };
-        await TrackPlayer.add([track], insertIdx);
+        TrackPlayer.insertMediaItem(insertIdx, mediaItem);
       } catch (e) {
         console.error("TrackPlayer addToQueue error:", e);
       }
@@ -304,7 +299,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (useNativeTrackPlayer) {
       try {
         const TrackPlayer = require('@rntp/player').default;
-        await TrackPlayer.remove(index);
+        TrackPlayer.removeMediaItem(index);
       } catch (e) {
         console.error("TrackPlayer removeFromQueue error:", e);
       }
@@ -335,16 +330,15 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (useNativeTrackPlayer) {
       try {
         const TrackPlayer = require('@rntp/player').default;
-        const tracks = newQueue.map(s => ({
-          id: s._id,
+        const mediaItems = newQueue.map(s => ({
+          mediaId: s._id,
           url: s.url,
           title: s.title,
           artist: 'Musiana Library',
-          artwork: s.imageUrl || '',
+          artworkUrl: s.imageUrl || undefined,
           duration: parseFloat(s.duration) || 0,
         }));
-        await TrackPlayer.setQueue(tracks);
-        await TrackPlayer.skip(nextIdx);
+        TrackPlayer.setMediaItems(mediaItems, nextIdx);
       } catch (e) {
         console.error("TrackPlayer reorderQueue error:", e);
       }
@@ -357,7 +351,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (useNativeTrackPlayer) {
       try {
         const TrackPlayer = require('@rntp/player').default;
-        await TrackPlayer.reset();
+        TrackPlayer.clear();
       } catch (e) {
         console.error("TrackPlayer clearQueue error:", e);
       }
@@ -425,17 +419,16 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       if (useNativeTrackPlayer) {
         const TrackPlayer = require('@rntp/player').default;
-        const tracks = queueRef.current.map(s => ({
-          id: s._id,
+        const mediaItems = queueRef.current.map(s => ({
+          mediaId: s._id,
           url: s.url,
           title: s.title,
           artist: 'Musiana Library',
-          artwork: s.imageUrl || '',
+          artworkUrl: s.imageUrl || undefined,
           duration: parseFloat(s.duration) || 0,
         }));
-        await TrackPlayer.setQueue(tracks);
-        await TrackPlayer.skip(songIdx);
-        await TrackPlayer.play();
+        TrackPlayer.setMediaItems(mediaItems, songIdx);
+        TrackPlayer.play();
         setCurrentlyPlaying(song);
         currentlyPlayingRef.current = song;
         setIsPlaying(true);
@@ -484,7 +477,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       if (useNativeTrackPlayer) {
         const TrackPlayer = require('@rntp/player').default;
-        await TrackPlayer.pause();
+        TrackPlayer.pause();
         setIsPlaying(false);
       } else if (soundRef.current && isPlaying) {
         await soundRef.current.pauseAsync();
@@ -499,7 +492,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       if (useNativeTrackPlayer) {
         const TrackPlayer = require('@rntp/player').default;
-        await TrackPlayer.play();
+        TrackPlayer.play();
         setIsPlaying(true);
       } else if (soundRef.current && !isPlaying) {
         await soundRef.current.playAsync();
@@ -514,7 +507,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       if (useNativeTrackPlayer) {
         const TrackPlayer = require('@rntp/player').default;
-        await TrackPlayer.seekTo(positionMs / 1000);
+        TrackPlayer.seekTo(positionMs / 1000);
         setPosition(positionMs);
       } else if (soundRef.current) {
         await soundRef.current.setPositionAsync(positionMs);
@@ -534,7 +527,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (useNativeTrackPlayer) {
       try {
         const TrackPlayer = require('@rntp/player').default;
-        await TrackPlayer.skipToNext();
+        TrackPlayer.skipToNext();
       } catch (e) {
         console.error("TrackPlayer playNext error:", e);
       }
@@ -573,10 +566,10 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         const TrackPlayer = require('@rntp/player').default;
         if (position >= 3000) {
-          await TrackPlayer.seekTo(0);
+          TrackPlayer.seekTo(0);
           setPosition(0);
         } else {
-          await TrackPlayer.skipToPrevious();
+          TrackPlayer.skipToPrevious();
         }
       } catch (e) {
         console.error("TrackPlayer playPrevious error:", e);
