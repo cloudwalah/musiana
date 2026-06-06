@@ -1,3 +1,19 @@
+diff --git a/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/TrackPlayerPlaybackService.kt b/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/TrackPlayerPlaybackService.kt
+index 8611c1f..e759484 100644
+--- a/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/TrackPlayerPlaybackService.kt
++++ b/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/TrackPlayerPlaybackService.kt
+@@ -311,7 +311,10 @@ class TrackPlayerPlaybackService: MediaLibraryService(), MediaLibraryService.Med
+       .build()
+ 
+     config.notificationSmallIcon?.let { iconName ->
+-      val iconRes = resources.getIdentifier(iconName, "drawable", packageName)
++      var iconRes = resources.getIdentifier(iconName, "drawable", packageName)
++      if (iconRes == 0) {
++        iconRes = resources.getIdentifier(iconName, "mipmap", packageName)
++      }
+       if (iconRes != 0) {
+         provider.setSmallIcon(iconRes)
+       }
 diff --git a/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/models/PlayerConfig.kt b/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/models/PlayerConfig.kt
 index 5a7bce1..6cc8295 100644
 --- a/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/models/PlayerConfig.kt

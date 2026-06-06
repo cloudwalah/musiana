@@ -137,6 +137,11 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             handleAudioBecomingNoisy: true,
             android: {
               wakeMode: 'network',
+              notification: {
+                channelId: 'musiana_channel',
+                channelName: 'Musiana',
+                smallIcon: 'ic_launcher'
+              }
             },
           });
         } catch (e: any) {
