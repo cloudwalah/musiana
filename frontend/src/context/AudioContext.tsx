@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Audio, AVPlaybackStatus, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
-import { NativeModules } from 'react-native';
+import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
 
 const isTrackPlayerSupported = !!NativeModules.TrackPlayerModule;
 
@@ -119,8 +119,23 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const TrackPlayer = require('@rntp/player').default;
         const { Capability, Event, State } = require('@rntp/player');
         
+        if (Platform.OS === 'android' && Platform.Version >= 33) {
+          try {
+            await PermissionsAndroid.request('android.permission.POST_NOTIFICATIONS');
+          } catch (err) {
+            console.log('Failed to request notification permission', err);
+          }
+        }
+        
         await TrackPlayer.setupPlayer();
         await TrackPlayer.updateOptions({
+          notificationCapabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+            Capability.SeekTo,
+          ],
           capabilities: [
             Capability.Play,
             Capability.Pause,
