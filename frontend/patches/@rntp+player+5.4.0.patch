@@ -1,0 +1,17 @@
+diff --git a/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/models/PlayerConfig.kt b/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/models/PlayerConfig.kt
+index 5a7bce1..6cc8295 100644
+--- a/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/models/PlayerConfig.kt
++++ b/node_modules/@rntp/player/android/src/main/java/com/doublesymmetry/trackplayer/models/PlayerConfig.kt
+@@ -125,7 +125,11 @@ data class PlayerConfig(
+     val sharedPreferences = context.getSharedPreferences(PLAYER_PREFS_NAME, Context.MODE_PRIVATE)
+     val json = sharedPreferences.getString(PLAYER_CONFIG_KEY, null)
+     return if (json != null) {
+-      Json.decodeFromString(json)
++      try {
++        Json.decodeFromString(json)
++      } catch (e: Exception) {
++        PlayerConfig()
++      }
+     } else {
+       PlayerConfig()
+     }
