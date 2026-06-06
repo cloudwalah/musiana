@@ -4,10 +4,8 @@
 // are handled natively without JS — this handler is only needed for custom logic.
 // For now we keep it minimal and let native handling do the work.
 
-module.exports = function () {
-  return async function (event) {
-    // V5 handles play/pause/next/prev/seek natively by default.
-    // Add custom logic here if needed (e.g., analytics, custom skip behavior).
-    console.log('Background event:', event.type);
-  };
+module.exports = async function (event) {
+  // V5 handles play/pause/next/prev/seek natively by default.
+  // Add custom logic here if needed (e.g., analytics, custom skip behavior).
+  console.log('Background event:', event?.type);
 };

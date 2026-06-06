@@ -118,8 +118,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return;
       }
       try {
-        const TrackPlayer = require('@rntp/player');
-        const { Event, PlayerCommand } = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
+        const { Event, PlayerCommand } = TPModule;
         
         if (Platform.OS === 'android' && Platform.Version >= 33) {
           try {
@@ -130,13 +131,21 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
         
         // V5: setupPlayer is synchronous
-        TrackPlayer.setupPlayer({
-          contentType: 'music',
-          handleAudioBecomingNoisy: true,
-          android: {
-            wakeMode: 'network',
-          },
-        });
+        try {
+          TrackPlayer.setupPlayer({
+            contentType: 'music',
+            handleAudioBecomingNoisy: true,
+            android: {
+              wakeMode: 'network',
+            },
+          });
+        } catch (e: any) {
+          if (e?.message?.includes('already set up')) {
+            console.log('TrackPlayer already set up, continuing...');
+          } else {
+            throw e;
+          }
+        }
 
         // V5: setCommands replaces updateOptions for notification/lockscreen controls
         TrackPlayer.setCommands({
@@ -201,7 +210,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         const { RepeatMode } = require('@rntp/player');
         TrackPlayer.setRepeatMode(isLoop ? RepeatMode.Track : RepeatMode.Queue);
       } catch (e) {
@@ -216,7 +226,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (isPlaying && useNativeTrackPlayer) {
       interval = setInterval(() => {
         try {
-          const TrackPlayer = require('@rntp/player');
+          const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
           const progress = TrackPlayer.getProgress();
           setPosition(progress.position * 1000); // convert seconds to ms
           setDuration(progress.duration * 1000);
@@ -259,7 +270,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         const mediaItem = {
           mediaId: song._id,
           url: song.url,
@@ -298,7 +310,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         TrackPlayer.removeMediaItem(index);
       } catch (e) {
         console.error("TrackPlayer removeFromQueue error:", e);
@@ -329,7 +342,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         const mediaItems = newQueue.map(s => ({
           mediaId: s._id,
           url: s.url,
@@ -350,7 +364,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCurrentIndex(-1);
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         TrackPlayer.clear();
       } catch (e) {
         console.error("TrackPlayer clearQueue error:", e);
@@ -418,7 +433,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       if (useNativeTrackPlayer) {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         const mediaItems = queueRef.current.map(s => ({
           mediaId: s._id,
           url: s.url,
@@ -476,7 +492,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const pause = async () => {
     try {
       if (useNativeTrackPlayer) {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         TrackPlayer.pause();
         setIsPlaying(false);
       } else if (soundRef.current && isPlaying) {
@@ -491,7 +508,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const resume = async () => {
     try {
       if (useNativeTrackPlayer) {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         TrackPlayer.play();
         setIsPlaying(true);
       } else if (soundRef.current && !isPlaying) {
@@ -506,7 +524,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const seek = async (positionMs: number) => {
     try {
       if (useNativeTrackPlayer) {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         TrackPlayer.seekTo(positionMs / 1000);
         setPosition(positionMs);
       } else if (soundRef.current) {
@@ -526,7 +545,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         TrackPlayer.skipToNext();
       } catch (e) {
         console.error("TrackPlayer playNext error:", e);
@@ -564,7 +584,8 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (useNativeTrackPlayer) {
       try {
-        const TrackPlayer = require('@rntp/player');
+        const TPModule = require('@rntp/player');
+        const TrackPlayer = TPModule.default || TPModule;
         if (position >= 3000) {
           TrackPlayer.seekTo(0);
           setPosition(0);
