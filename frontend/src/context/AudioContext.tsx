@@ -2,7 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { Audio, AVPlaybackStatus, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
 
-const isTrackPlayerSupported = !!NativeModules.TrackPlayerModule;
+// V5 (@rntp/player) uses TurboModules, so check both the TurboModule proxy and legacy NativeModules
+const isTurboModuleEnabled = !!(global as any).__turboModuleProxy;
+const isTrackPlayerSupported = isTurboModuleEnabled || !!NativeModules.TrackPlayer || !!NativeModules.TrackPlayerModule;
 
 export interface Music {
   _id: string;

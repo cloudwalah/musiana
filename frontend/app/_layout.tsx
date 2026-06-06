@@ -2,7 +2,9 @@ import { Stack } from 'expo-router';
 import { AudioProvider } from '../src/context/AudioContext';
 import { NativeModules } from 'react-native';
 
-const isTrackPlayerSupported = !!NativeModules.TrackPlayerModule;
+// V5 (@rntp/player) uses TurboModules, so check both the TurboModule proxy and legacy NativeModules
+const isTurboModuleEnabled = !!(global as any).__turboModuleProxy;
+const isTrackPlayerSupported = isTurboModuleEnabled || !!NativeModules.TrackPlayer || !!NativeModules.TrackPlayerModule;
 
 if (isTrackPlayerSupported) {
   try {
