@@ -218,7 +218,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const TPModule = require('@rntp/player');
         const TrackPlayer = TPModule.default || TPModule;
         const { RepeatMode } = require('@rntp/player');
-        TrackPlayer.setRepeatMode(isLoop ? RepeatMode.Track : RepeatMode.Queue);
+        TrackPlayer.setRepeatMode(isLoop ? RepeatMode.One : RepeatMode.All);
       } catch (e) {
         console.error("Failed to sync loop mode to TrackPlayer:", e);
       }
