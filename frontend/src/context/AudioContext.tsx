@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Audio, AVPlaybackStatus, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
-import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
+import { NativeModules, Platform, PermissionsAndroid, AppState } from 'react-native';
 
 // V5 (@rntp/player) uses TurboModules, so check both the TurboModule proxy and legacy NativeModules
 const isTurboModuleEnabled = !!(global as any).__turboModuleProxy;
@@ -224,6 +224,32 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
   }, [isLoop, useNativeTrackPlayer]);
+
+  // Fix for Lockscreen Sync: Force a re-sync of the playback state when the app comes back to the foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && useNativeTrackPlayer) {
+        try {
+          const TPModule = require('@rntp/player');
+          const TrackPlayer = TPModule.default || TPModule;
+          const isNativePlaying = TrackPlayer.isPlaying();
+          setIsPlaying(isNativePlaying);
+          
+          const progress = TrackPlayer.getProgress();
+          if (progress) {
+            setPosition(progress.position * 1000);
+            setDuration(progress.duration * 1000);
+          }
+        } catch (e) {
+          console.error("Failed to sync state on app resume:", e);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [useNativeTrackPlayer]);
 
   // Periodic progress tracker for TrackPlayer
   useEffect(() => {
