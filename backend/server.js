@@ -116,7 +116,7 @@ app.get('/api/debug', async (req, res) => {
         debugInfo.errors.push(`yt-dlp --version failed: ${e.message}`);
     }
 
-    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : '';
+    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}" --extractor-args "youtube:player_client=android"` : `--extractor-args "youtube:player_client=android"`;
     try {
         const { stdout } = await execPromise(`${ytDlpCmd} ${cookiesArg} --js-runtimes node --remote-components ejs:github --print "%(title)s" "ytsearch1:adele hello"`);
         debugInfo.testSearch = stdout.trim();
