@@ -225,43 +225,27 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [isLoop, useNativeTrackPlayer]);
 
-  // Fix for Lockscreen Sync: Force a re-sync of the playback state when the app comes back to the foreground
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active' && useNativeTrackPlayer) {
-        try {
-          const TPModule = require('@rntp/player');
-          const TrackPlayer = TPModule.default || TPModule;
-          const isNativePlaying = TrackPlayer.isPlaying();
-          setIsPlaying(isNativePlaying);
-          
-          const progress = TrackPlayer.getProgress();
-          if (progress) {
-            setPosition(progress.position * 1000);
-            setDuration(progress.duration * 1000);
-          }
-        } catch (e) {
-          console.error("Failed to sync state on app resume:", e);
-        }
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [useNativeTrackPlayer]);
-
-  // Periodic progress tracker for TrackPlayer
+  // Periodic state and progress tracker for TrackPlayer
   useEffect(() => {
     let interval: any;
-    if (isPlaying && useNativeTrackPlayer) {
+    if (useNativeTrackPlayer) {
       interval = setInterval(() => {
         try {
           const TPModule = require('@rntp/player');
-        const TrackPlayer = TPModule.default || TPModule;
-          const progress = TrackPlayer.getProgress();
-          setPosition(progress.position * 1000); // convert seconds to ms
-          setDuration(progress.duration * 1000);
+          const TrackPlayer = TPModule.default || TPModule;
+          
+          // Continuously sync the source-of-truth state from the native engine
+          const isNativePlaying = TrackPlayer.isPlaying();
+          setIsPlaying(isNativePlaying);
+
+          // Only poll progress if it is actively playing
+          if (isNativePlaying) {
+            const progress = TrackPlayer.getProgress();
+            if (progress) {
+              setPosition(progress.position * 1000); // convert seconds to ms
+              setDuration(progress.duration * 1000);
+            }
+          }
         } catch (e) {
           // ignore
         }
@@ -270,7 +254,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isPlaying, useNativeTrackPlayer]);
+  }, [useNativeTrackPlayer]);
 
   const setQueue = (newQueue: Music[]) => {
     setQueueState(newQueue);
