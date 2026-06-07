@@ -140,7 +140,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               notification: {
                 channelId: 'musiana_channel',
                 channelName: 'Musiana',
-                smallIcon: 'ic_launcher'
+                smallIcon: 'notification_icon'
               }
             },
           });
@@ -189,7 +189,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // V5: IsPlayingChanged replaces PlaybackState
         const playbackStateListener = TrackPlayer.addEventListener(Event.IsPlayingChanged, (event: any) => {
           if (active) {
-            setIsPlaying(event.isPlaying);
+            setIsPlaying(event.playing);
           }
         });
         eventListeners.push(playbackStateListener);
