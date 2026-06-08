@@ -88,7 +88,7 @@ const downloadAndUpload = async (query, resolvedVideoId = null, resolvedTitle = 
     // 1. Search YouTube if videoId was not passed directly
     if (!videoId) {
       console.log(`🔍 Searching YouTube for: "${query}"`);
-      const cookiesArg = hasCookies ? `--cookies "${cookiesPath}" --extractor-args "youtube:player_client=android"` : `--extractor-args "youtube:player_client=android"`;
+      const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : `--extractor-args "youtube:player_client=android"`;
       const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --js-runtimes node --remote-components ejs:github --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch1:${query}"`);
       
       const parts = stdout.trim().split('###');
@@ -149,9 +149,10 @@ const downloadAndUpload = async (query, resolvedVideoId = null, resolvedTitle = 
     const downloadArgs = [];
     if (hasCookies) {
       downloadArgs.push('--cookies', cookiesPath);
+    } else {
+      downloadArgs.push('--extractor-args', 'youtube:player_client=android');
     }
     downloadArgs.push(
-      '--extractor-args', 'youtube:player_client=android',
       '--js-runtimes', 'node',
       '--remote-components', 'ejs:github',
       '--extract-audio',
@@ -303,7 +304,7 @@ const downloadAndUpload = async (query, resolvedVideoId = null, resolvedTitle = 
 
 const fetchYouTubeMetadata = async (query) => {
   try {
-    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}" --extractor-args "youtube:player_client=android"` : `--extractor-args "youtube:player_client=android"`;
+    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : `--extractor-args "youtube:player_client=android"`;
     const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --js-runtimes node --remote-components ejs:github --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch1:${query}"`);
     
     const parts = stdout.trim().split('###');
@@ -323,7 +324,7 @@ const fetchYouTubeMetadata = async (query) => {
 
 const fetchMultipleYouTubeMetadata = async (query, count = 5) => {
   try {
-    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}" --extractor-args "youtube:player_client=android"` : `--extractor-args "youtube:player_client=android"`;
+    const cookiesArg = hasCookies ? `--cookies "${cookiesPath}"` : `--extractor-args "youtube:player_client=android"`;
     const { stdout } = await execPromise(`yt-dlp ${cookiesArg} --js-runtimes node --remote-components ejs:github --print "%(title)s###%(id)s###%(thumbnail)s" "ytsearch${count}:${query}"`);
     
     const lines = stdout.trim().split('\n').filter(Boolean);
